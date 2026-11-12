@@ -43,6 +43,9 @@ macOS and Linux are untested. The code does not block them, but `keys` actions w
 | `wake-trigger devices` | Lists microphones. |
 | `wake-trigger test` | Listens and prints one line per clip. Runs no actions. |
 | `wake-trigger start` | Listens and runs actions. Logs each trigger that fires, each match that was ignored because of the cooldown or the group state, and each match skipped because its required program is not running. Only one copy can run at a time; a second `start` stops with `wake-trigger is already running`. |
+| `wake-trigger stop` | Stops the running copy. |
+| `wake-trigger status` | Shows whether a copy is running and whether it starts at sign-in. |
+| `wake-trigger autostart enable` / `disable` | Starts it hidden at every Windows sign-in, or stops doing so. See "Running at login". |
 | `wake-trigger --help` | Shows the usage text. |
 
 `start` and `test` print `Models missing. Run: wake-trigger setup` when the models are not there.
@@ -235,12 +238,24 @@ wake-trigger is not as accurate as the wake word on a phone. If a phrase is miss
 
 ## Running at login
 
-Autostart is not automated. To do it by hand on Windows:
+```
+wake-trigger autostart enable
+```
 
-1. Press Win+R, type `shell:startup`, and press Enter. The Startup folder opens.
-2. Create a shortcut in that folder. Set its target to `cmd.exe /k wake-trigger start`.
+This writes a small script, `wake-trigger.vbs`, into your Windows Startup folder. At each sign-in it starts `wake-trigger start` with no window. It uses the exact `node` and the exact build that ran the command, so `npm link` is not needed.
 
-This uses `wake-trigger` from your PATH, so run `npm link` first. A console window stays open while it runs, and `/k` keeps it open if an error stops the program at login. Close it to stop wake-trigger. This setup has not been tested.
+A hidden program has no console, so its output goes to `~/.wake-trigger/wake-trigger.log`. Look there if a phrase does nothing.
+
+| Command | What it does |
+|---|---|
+| `wake-trigger autostart enable` | Start hidden at every sign-in. Does not start it now. |
+| `wake-trigger autostart disable` | Remove the Startup script. A copy running now keeps running. |
+| `wake-trigger status` | Shows whether a copy is running, and whether autostart is on. |
+| `wake-trigger stop` | Stops the running copy, hidden or not. |
+
+To start it hidden right away without signing out, double-click `wake-trigger.vbs` in the Startup folder (Win+R, `shell:startup`).
+
+Limits: Windows only. If the microphone is not ready at sign-in, the program stops and the log says why; start it again with the script. If you move the project folder or change your Node.js install, run `autostart enable` again.
 
 ## Privacy
 

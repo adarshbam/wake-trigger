@@ -10,7 +10,8 @@ import { Pipeline } from "./pipeline";
 import { runAction } from "./actions";
 import { preset } from "./presets";
 import { describeError, formatClip, formatFired, formatIgnored, formatNotRunning } from "./format";
-import { acquireLock } from "./lock";
+import { acquireLock, lockOwner } from "./lock";
+import { autostartEnabled, disableAutostart, enableAutostart } from "./autostart";
 import { ProcessWatch } from "./processes";
 
 const USAGE = `Usage: wake-trigger <command>
@@ -21,6 +22,9 @@ Commands:
   devices                                              List microphones
   test                                                 Listen and show what is heard (runs no actions)
   start                                                Listen and run actions
+  stop                                                 Stop the running copy
+  status                                               Show whether it is running and starts at sign-in
+  autostart enable|disable                             Start hidden at Windows sign-in, or stop doing so
   --help                                               Show this text`;
 
 function fail(message: string): never {
@@ -86,7 +90,7 @@ async function listen(mode: "test" | "start"): Promise<void> {
     // Two listening copies would each fire on the same phrase.
     let lock;
     try {
-      lock = acquireLock(path.join(homeDir(), "start.lock"));
+      lock = acquireLock(lockFile());
     } catch (e) {
       fail(describeError(e));
     }
@@ -142,6 +146,55 @@ async function listen(mode: "test" | "start"): Promise<void> {
   });
 }
 
+const lockFile = () => path.join(homeDir(), "start.lock");
+const logFile = () => path.join(homeDir(), "wake-trigger.log");
+
+function stop(): void {
+  const pid = lockOwner(lockFile());
+  if (pid === null) {
+    console.log("wake-trigger is not running.");
+    return;
+  }
+  process.kill(pid);
+  fs.rmSync(lockFile(), { force: true }); // a killed process cannot remove its own lock
+  console.log(`Stopped wake-trigger (process ${pid}).`);
+}
+
+function status(): void {
+  const pid = lockOwner(lockFile());
+  console.log(pid === null ? "Running: no" : `Running: yes (process ${pid})`);
+  let auto: string;
+  try {
+    auto = autostartEnabled() ? "yes" : "no";
+  } catch {
+    auto = "not supported on this system";
+  }
+  console.log(`Starts at sign-in: ${auto}`);
+  console.log(`Log when started at sign-in: ${logFile()}`);
+}
+
+function autostart(rest: string[]): void {
+  const [action, ...extra] = rest;
+  if (extra.length > 0 || (action !== "enable" && action !== "disable")) {
+    console.error(`Use: wake-trigger autostart enable|disable
+
+${USAGE}`);
+    process.exit(1);
+  }
+  if (action === "disable") {
+    console.log(disableAutostart() ? "Autostart removed. A copy that is running now keeps running; use: wake-trigger stop"
+      : "Autostart was not enabled.");
+    return;
+  }
+  loadConfig(); // refuse to autostart something that cannot start
+  fs.mkdirSync(homeDir(), { recursive: true });
+  // process.execPath and this file: the exact node and build that are running now.
+  const file = enableAutostart(process.execPath, __filename, logFile());
+  console.log(`Autostart enabled: ${file}`);
+  console.log(`At each sign-in wake-trigger starts hidden and writes to ${logFile()}`);
+  console.log("It is not started now. Start it with: wake-trigger start   Stop it with: wake-trigger stop");
+}
+
 function noArguments(command: string, rest: string[]): void {
   if (rest.length > 0) {
     console.error(`Unexpected argument "${rest[0]}" for "${command}".
@@ -162,6 +215,9 @@ async function main(): Promise<void> {
     case "init": return init(rest);
     case "setup": noArguments(command, rest); return setup();
     case "devices": noArguments(command, rest); return devices();
+    case "stop": noArguments(command, rest); return stop();
+    case "status": noArguments(command, rest); return status();
+    case "autostart": return autostart(rest);
     case "test":
     case "start": noArguments(command, rest); return listen(command);
     default:

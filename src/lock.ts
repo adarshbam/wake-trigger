@@ -43,3 +43,15 @@ export function acquireLock(file: string, pid: number = process.pid, isAlive: (p
   }
   throw new Error(`could not take the lock file ${file}`);
 }
+
+/** Process id of the live copy that holds the lock, or null. */
+export function lockOwner(file: string, isAlive: (pid: number) => boolean = processAlive): number | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  const pid = Number(text.trim());
+  return Number.isInteger(pid) && pid > 0 && isAlive(pid) ? pid : null;
+}
