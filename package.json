@@ -17,9 +17,12 @@
     "dev": "tsx src/cli.ts"
   },
   "devDependencies": {
-    "@types/node": "^20.19.43",
+    "@types/node": "^22.20.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@picovoice/pvrecorder-node": "^1.2.9"
   }
 }
