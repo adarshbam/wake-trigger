@@ -120,6 +120,24 @@ describe("downloadModels", () => {
     expect(fs.existsSync(modelFiles("moonshine-tiny-en", root).vad)).toBe(false);
   });
 
+  it("rejects when writing to disk fails and leaves no .part file", async () => {
+    // A directory where the .part file must go makes opening it for writing fail (EISDIR).
+    fs.mkdirSync(path.join(root, "silero_vad.onnx.part"), { recursive: true });
+    await expect(downloadModels("moonshine-tiny-en", () => {}, root, okFetch())).rejects.toThrow(/EISDIR|illegal operation/);
+    expect(leftovers()).toEqual([]);
+  });
+
+  it("rejects an archive that lacks a model file and leaves no model directory", async () => {
+    fs.rmSync(path.join(work, "src", "sherpa-onnx-moonshine-test", "tokens.txt"));
+    const r = spawnSync("tar", ["-cjf", "test.tar.bz2", "-C", "src", "sherpa-onnx-moonshine-test"], { cwd: work });
+    if (r.status !== 0) throw new Error("cannot build test archive: " + String(r.stderr));
+    archive = fs.readFileSync(path.join(work, "test.tar.bz2"));
+    await expect(downloadModels("moonshine-tiny-en", () => {}, root, okFetch())).rejects.toThrow(
+      "archive did not contain encoder_model.ort / decoder_model_merged.ort / tokens.txt");
+    expect(fs.existsSync(path.join(root, "moonshine-tiny-en"))).toBe(false);
+    expect(leftovers()).toEqual([]);
+  });
+
   it("skips items that are already present", async () => {
     touchAll("moonshine-tiny-en");
     fs.rmSync(path.join(root, "moonshine-tiny-en"), { recursive: true });

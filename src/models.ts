@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { homeDir } from "./config";
 import type { Config } from "./config";
 
@@ -41,23 +43,21 @@ async function downloadTo(url: string, dest: string, name: string, onProgress: P
     if (!res.body) throw new Error(`download of ${name} failed: empty response`);
     const header = res.headers.get("content-length");
     const total = header === null ? 0 : Number(header);
-    const out = fs.createWriteStream(part);
     let done = 0;
-    try {
-      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-        if (!out.write(chunk)) await new Promise<void>((resolve) => out.once("drain", resolve));
+    const progress = new Transform({
+      transform(chunk: Buffer, _enc, cb) {
         done += chunk.length;
         onProgress(name, done, total);
-      }
-    } finally {
-      await new Promise<void>((resolve) => out.end(resolve));
-    }
+        cb(null, chunk);
+      },
+    });
+    await pipeline(Readable.fromWeb(res.body as import("node:stream/web").ReadableStream<Uint8Array>), progress, fs.createWriteStream(part));
     if (header !== null && done !== total) {
       throw new Error(`download of ${name} incomplete: got ${done} of ${total} bytes`);
     }
     fs.renameSync(part, dest);
   } catch (e) {
-    fs.rmSync(part, { force: true });
+    fs.rmSync(part, { recursive: true, force: true });
     throw e;
   }
 }
@@ -106,6 +106,10 @@ export async function downloadModels(
     await extract(archive, tmpDir, root);
     fs.rmSync(finalDir, { recursive: true, force: true });
     fs.renameSync(tmpDir, finalDir);
+    if (![files.encoder, files.mergedDecoder, files.tokens].every((p) => fs.existsSync(p))) {
+      fs.rmSync(finalDir, { recursive: true, force: true });
+      throw new Error("archive did not contain encoder_model.ort / decoder_model_merged.ort / tokens.txt");
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
     fs.rmSync(archive, { force: true });
