@@ -31,8 +31,27 @@ describe.skipIf(!modelsPresent("moonshine-base-en") || !existsSync(fixture))("re
       const to = Math.min(audio.length, s.start + s.length + PAD);
       return normalize(transcriber.transcribe(audio.slice(from, to)));
     });
-    console.log("transcriptions:", JSON.stringify(texts));
     expect(texts.some((t) => t.length > 0)).toBe(true);
     expect(texts).toContain("computer listen");
+  }, 60_000);
+
+  it("gives the same segments when the VAD is rebased early", () => {
+    const files = modelFiles("moonshine-base-en");
+    const raw = readFileSync(fixture);
+    const audio = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
+    const run = (segmenter: ReturnType<typeof createSegmenter>) => {
+      const out = [];
+      for (let i = 0; i < audio.length; i += 700) {
+        out.push(...segmenter.accept(audio.subarray(i, Math.min(i + 700, audio.length))));
+      }
+      return out;
+    };
+    const normal = run(createSegmenter(files));
+    const rebased = run(createSegmenter(files, 16000));
+    expect(normal.length).toBeGreaterThan(0);
+    expect(rebased).toHaveLength(normal.length);
+    rebased.forEach((s, i) => {
+      expect(Math.abs(s.start - normal[i].start)).toBeLessThanOrEqual(512);
+    });
   }, 60_000);
 });
