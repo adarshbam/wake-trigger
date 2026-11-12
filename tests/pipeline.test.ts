@@ -20,6 +20,7 @@ let clipLengths: number[];
 let events: ClipEvent[];
 let fired: Trigger[];
 let pipeline: Pipeline;
+let runningNames: string[] | null;
 
 const segmenter: Segmenter = {
   accept() {
@@ -45,6 +46,15 @@ function say(text: string, segment: Segment = { start: 16000, length: 12800 }): 
   pipeline.feed(new Float32Array(0));
 }
 
+function make(c: typeof config): Pipeline {
+  return new Pipeline(c, segmenter, transcriber, {
+    now,
+    onClip: (e) => events.push(e),
+    onFire: (t) => fired.push(t),
+    isRunning: (name) => runningNames === null || runningNames.includes(name),
+  });
+}
+
 beforeEach(() => {
   ms = 0;
   queuedSegments = [];
@@ -52,11 +62,8 @@ beforeEach(() => {
   clipLengths = [];
   events = [];
   fired = [];
-  pipeline = new Pipeline(config, segmenter, transcriber, {
-    now,
-    onClip: (e) => events.push(e),
-    onFire: (t) => fired.push(t),
-  });
+  runningNames = null;
+  pipeline = make(config);
   pipeline.feed(silence(3));
 });
 
@@ -156,5 +163,73 @@ describe("Pipeline", () => {
     expect(clip.length).toBe(length + 2 * 4800);
     expect(clip[0]).toBeCloseTo(ramp(start - 4800), 6);
     expect(clip[clip.length - 1]).toBeCloseTo(ramp(start + length + 4800 - 1), 6);
+  });
+
+  it("forces a state-blocked phrase when it is repeated within forceRepeatSeconds", () => {
+    say("computer finish");
+    expect(events[0]).toMatchObject({ outcome: "blocked-by-state", forced: false });
+    ms = 9000;
+    say("computer finish");
+    expect(events[1]).toMatchObject({ outcome: "fired", forced: true });
+    expect(fired).toEqual([config.triggers[1]]);
+    // the force is used up: the next one is blocked again
+    ms = 12000;
+    say("computer finish");
+    expect(events[2].outcome).toBe("blocked-by-state");
+  });
+
+  it("does not force when the repeat comes too late, or when a different phrase was blocked", () => {
+    say("computer finish");
+    ms = 10001;
+    say("computer finish");
+    expect(events[1].outcome).toBe("blocked-by-state"); // too late; this one restarts the window
+    ms = 12000;
+    say("computer listen");
+    expect(events[2]).toMatchObject({ outcome: "fired", forced: false });
+    ms = 14000;
+    say("computer listen");
+    expect(events[3].outcome).toBe("blocked-by-state"); // first block of this phrase
+    expect(fired).toEqual([config.triggers[0]]);
+  });
+
+  it("a forced start keeps the group on, so the stop phrase then works", () => {
+    say("computer listen");
+    ms = 3000;
+    say("computer listen");
+    ms = 6000;
+    say("computer listen");
+    expect(events.map((e) => [e.outcome, e.forced])).toEqual([["fired", false], ["blocked-by-state", false], ["fired", true]]);
+    ms = 9000;
+    say("computer finish");
+    expect(events[3]).toMatchObject({ outcome: "fired", forced: false });
+  });
+
+  it("forceRepeatSeconds 0 disables forcing", () => {
+    pipeline = make(parseConfig({ forceRepeatSeconds: 0, triggers: [
+      { phrase: "computer listen", group: "handy", sets: "on", action: { run: "x" } },
+      { phrase: "computer finish", group: "handy", sets: "off", action: { run: "x" } },
+    ] }));
+    pipeline.feed(silence(3));
+    say("computer finish");
+    ms = 2000;
+    say("computer finish");
+    expect(events.map((e) => e.outcome)).toEqual(["blocked-by-state", "blocked-by-state"]);
+  });
+
+  it("skips a trigger whose required process is not running, without changing state", () => {
+    const c = parseConfig({ triggers: [
+      { phrase: "computer listen", group: "handy", sets: "on", requires: "handy.exe", action: { run: "x" } },
+      { phrase: "computer finish", group: "handy", sets: "off", requires: "handy.exe", action: { run: "x" } },
+    ] });
+    pipeline = make(c);
+    pipeline.feed(silence(3));
+    runningNames = [];
+    say("computer listen");
+    expect(events[0]).toMatchObject({ outcome: "not-running", trigger: c.triggers[0] });
+    expect(fired).toEqual([]);
+    runningNames = ["handy.exe"];
+    ms = 2000;
+    say("computer listen");
+    expect(events[1].outcome).toBe("fired"); // state was not turned on by the skipped attempt
   });
 });

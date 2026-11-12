@@ -138,3 +138,18 @@ describe("paths and loadConfig", () => {
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 });
+
+describe("forceRepeatSeconds and requires", () => {
+  const t = (extra = {}) => ({ phrase: "a b", action: { run: "x" }, ...extra });
+  it("defaults forceRepeatSeconds to 10 and accepts 0", () => {
+    expect(parseConfig({ triggers: [t()] }).forceRepeatSeconds).toBe(10);
+    expect(parseConfig({ forceRepeatSeconds: 0, triggers: [t()] }).forceRepeatSeconds).toBe(0);
+    expect(() => parseConfig({ forceRepeatSeconds: -1, triggers: [t()] })).toThrow(/forceRepeatSeconds/);
+  });
+  it("keeps requires and rejects a non-string or empty one", () => {
+    expect(parseConfig({ triggers: [t({ requires: "handy.exe" })] }).triggers[0].requires).toBe("handy.exe");
+    expect(parseConfig({ triggers: [t()] }).triggers[0].requires).toBeUndefined();
+    expect(() => parseConfig({ triggers: [t({ requires: "" })] })).toThrow(/triggers\[0\]\.requires/);
+    expect(() => parseConfig({ triggers: [t({ requires: 5 })] })).toThrow(/triggers\[0\]\.requires/);
+  });
+});

@@ -15,7 +15,16 @@ export function formatTime(d: Date): string {
 }
 
 export function formatIgnored(d: Date, trigger: Trigger, reason: "cooldown" | "blocked-by-state"): string {
-  return `[${formatTime(d)}] ignored "${trigger.phrase}" (${reason})`;
+  const hint = reason === "blocked-by-state" ? "; say it again to force" : "";
+  return `[${formatTime(d)}] ignored "${trigger.phrase}" (${reason}${hint})`;
+}
+
+export function formatFired(d: Date, trigger: Trigger, forced: boolean): string {
+  return `[${formatTime(d)}] fired "${trigger.phrase}"${forced ? " (forced by repeat)" : ""}`;
+}
+
+export function formatNotRunning(d: Date, trigger: Trigger): string {
+  return `[${formatTime(d)}] skipped "${trigger.phrase}" (${trigger.requires} is not running)`;
 }
 
 /** Error text with the cause appended: Node's fetch reports only "fetch failed" and keeps the reason in `cause`. */

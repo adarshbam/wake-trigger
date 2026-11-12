@@ -7,6 +7,7 @@ const DEFAULTS = {
   maxPhraseSeconds: 3,
   cooldownSeconds: 1.5,
   maxOnSeconds: 300,
+  forceRepeatSeconds: 10,
 };
 
 export function preset(name: "default" | "handy", handyPath?: string): unknown {
@@ -19,6 +20,7 @@ export function preset(name: "default" | "handy", handyPath?: string): unknown {
           aliases: ["computer listening"],
           group: "handy",
           sets: "on",
+          requires: "handy.exe",
           action: { run: handyPath ?? PLACEHOLDER_HANDY_PATH, args: ["--toggle-post-process"] },
         },
         {
@@ -26,6 +28,7 @@ export function preset(name: "default" | "handy", handyPath?: string): unknown {
           aliases: [],
           group: "handy",
           sets: "off",
+          requires: "handy.exe",
           action: { run: handyPath ?? PLACEHOLDER_HANDY_PATH, args: ["--toggle-post-process"] },
         },
       ],

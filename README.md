@@ -42,7 +42,7 @@ macOS and Linux are untested. The code does not block them, but `keys` actions w
 | `wake-trigger setup` | Downloads the voice-activity model and the speech model into `~/.wake-trigger/models`. |
 | `wake-trigger devices` | Lists microphones. |
 | `wake-trigger test` | Listens and prints one line per clip. Runs no actions. |
-| `wake-trigger start` | Listens and runs actions. Logs each trigger that fires, and each match that was ignored because of the cooldown or the group state, for example `[12:00:01] ignored "computer finish" (blocked-by-state)`. |
+| `wake-trigger start` | Listens and runs actions. Logs each trigger that fires, each match that was ignored because of the cooldown or the group state, and each match skipped because its required program is not running. Only one copy can run at a time; a second `start` stops with `wake-trigger is already running`. |
 | `wake-trigger --help` | Shows the usage text. |
 
 `start` and `test` print `Models missing. Run: wake-trigger setup` when the models are not there.
@@ -91,6 +91,7 @@ If the config is invalid, the program stops at start with a message that names t
 | `maxPhraseSeconds` | number, above 0 | `3` | Clips longer than this are skipped. |
 | `cooldownSeconds` | number, 0 or more | `1.5` | After a trigger fires, any match within this time is ignored. |
 | `maxOnSeconds` | number, above 0 | `300` | A group that was turned on returns to off after this many seconds. |
+| `forceRepeatSeconds` | number, 0 or more | `10` | A phrase ignored because of group state fires anyway when it is said again within this time. `0` turns this off. |
 | `triggers` | array, not empty | none | The list of triggers. Required. |
 
 ### Trigger fields
@@ -102,6 +103,7 @@ If the config is invalid, the program stops at start with a message that names t
 | `action` | object | yes | What to do. See below. |
 | `group` | string | no | Name of a shared on/off state. Needs `sets`. |
 | `sets` | `"on"` or `"off"` | no | Whether this trigger turns its group on or off. Needs `group`. |
+| `requires` | string | no | Name of a process, for example `"handy.exe"`. The trigger is skipped while that process is not running. |
 
 ### Actions
 
@@ -137,6 +139,28 @@ Triggers that share a `group` solve this. A trigger with `sets: "on"` fires only
 
 A group returns to off after `maxOnSeconds`, so a missed stop phrase cannot leave the state wrong for ever.
 
+wake-trigger cannot see the real state of the app. It only remembers what it sent. If you start or stop the app another way, that memory is wrong, and the next phrase is ignored:
+
+```
+[12:00:01] ignored "computer finish" (blocked-by-state; say it again to force)
+```
+
+Say the same phrase again within `forceRepeatSeconds` and it fires anyway:
+
+```
+[12:00:05] fired "computer finish" (forced by repeat)
+```
+
+### `requires`
+
+A toggle command sent to an app that is closed usually just opens the app, and the state goes wrong. Give the trigger `"requires": "handy.exe"` and it is skipped while that program is not running:
+
+```
+[12:00:01] skipped "computer listen" (handy.exe is not running)
+```
+
+The process list is refreshed every 2 seconds. On Windows the name is the image name shown by `tasklist`.
+
 ## Handy preset
 
 Run:
@@ -152,7 +176,7 @@ The preset defines two phrases:
 - "computer listen" (alias "computer listening") turns the group `handy` on.
 - "computer finish" turns the group `handy` off.
 
-Both run `handy.exe --toggle-post-process`. This Handy flag toggles recording with post-processing. Handy's command line only toggles. It cannot tell wake-trigger whether it is recording. That is why the preset uses a group.
+Both run `handy.exe --toggle-post-process`. This Handy flag toggles recording with post-processing. Handy's command line only toggles. It cannot tell wake-trigger whether it is recording. That is why the preset uses a group. Both triggers also set `requires: "handy.exe"`, so nothing is sent while Handy is closed. Start Handy first.
 
 While Handy records, it also hears you say "computer finish", so the phrase ends up in the text. Add this line to Handy's post-processing prompt to remove it:
 
@@ -170,7 +194,7 @@ Run `wake-trigger test` and say your candidate phrases. For every clip it prints
 1.2s  level 0.045  "computer listen"  nearest "computer listen" (0)  -> fired
 ```
 
-The outcome is one of `fired`, `no-match`, `too-long`, `cooldown` or `blocked-by-state`. In `test` mode no action runs, so `fired` means "would fire".
+The outcome is one of `fired`, `no-match`, `too-long`, `cooldown`, `blocked-by-state` or `not-running`. In `test` mode no action runs, so `fired` means "would fire".
 
 What works, from testing:
 
@@ -204,7 +228,8 @@ wake-trigger is not as accurate as the wake word on a phone. If a phrase is miss
 - Only Windows 11 is tested. macOS and Linux are untested.
 - `keys` works on Windows only and cannot press the Windows key.
 - The stop phrase stays in the text in raw dictation. The post-processing prompt line above removes it.
-- If you stop the app by keyboard, wake-trigger does not know. Its state stays wrong for up to `maxOnSeconds`. In that time the next start phrase is ignored.
+- If you stop the app by keyboard, wake-trigger does not know. Its state stays wrong for up to `maxOnSeconds`. In that time the next start phrase is ignored once; say it again to force it.
+- Handy must already be running. The first recording right after Handy launches can misfire.
 - Phrases are fixed triggers. There are no voice commands with parameters.
 - There is no graphical interface and no tray icon.
 

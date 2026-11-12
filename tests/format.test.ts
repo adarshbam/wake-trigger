@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { formatClip, describeError, formatIgnored, formatTime } from "../src/format";
+import { formatClip, describeError, formatFired, formatIgnored, formatNotRunning, formatTime } from "../src/format";
 import type { ClipEvent } from "../src/pipeline";
 
-const base: ClipEvent = { text: "computer listen", seconds: 1.234, level: 0.0456, nearest: { phrase: "computer listen", distance: 0 }, outcome: "fired", trigger: null };
+const base: ClipEvent = { text: "computer listen", seconds: 1.234, level: 0.0456, nearest: { phrase: "computer listen", distance: 0 }, outcome: "fired", trigger: null, forced: false };
 
 describe("formatClip", () => {
   it("formats a full line", () => {
@@ -27,8 +27,20 @@ describe("formatIgnored", () => {
   it("names the phrase and the reason", () => {
     const trigger = { phrase: "computer listen", aliases: [], action: { run: "x" } };
     const d = new Date(2026, 0, 1, 3, 4, 5);
-    expect(formatIgnored(d, trigger, "blocked-by-state")).toBe('[03:04:05] ignored "computer listen" (blocked-by-state)');
+    expect(formatIgnored(d, trigger, "blocked-by-state")).toBe('[03:04:05] ignored "computer listen" (blocked-by-state; say it again to force)');
     expect(formatIgnored(d, trigger, "cooldown")).toBe('[03:04:05] ignored "computer listen" (cooldown)');
+  });
+});
+
+describe("formatFired and formatNotRunning", () => {
+  const d = new Date(2026, 0, 1, 3, 4, 5);
+  const trigger = { phrase: "computer finish", aliases: [], requires: "handy.exe", action: { run: "x" } };
+  it("marks a forced fire", () => {
+    expect(formatFired(d, trigger, false)).toBe('[03:04:05] fired "computer finish"');
+    expect(formatFired(d, trigger, true)).toBe('[03:04:05] fired "computer finish" (forced by repeat)');
+  });
+  it("names the missing process", () => {
+    expect(formatNotRunning(d, trigger)).toBe('[03:04:05] skipped "computer finish" (handy.exe is not running)');
   });
 });
 

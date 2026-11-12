@@ -9,10 +9,18 @@ import { GroupState } from "./state";
 export interface ClipEvent {
   text: string; seconds: number; level: number;
   nearest: { phrase: string; distance: number } | null;
-  outcome: "fired" | "no-match" | "too-long" | "cooldown" | "blocked-by-state";
+  outcome: "fired" | "no-match" | "too-long" | "cooldown" | "blocked-by-state" | "not-running";
   trigger: Trigger | null;
+  /** True when a fire happened only because the phrase was repeated after being blocked by state. */
+  forced: boolean;
 }
-export interface PipelineOptions { now: () => number; onClip: (e: ClipEvent) => void; onFire: (t: Trigger) => void }
+export interface PipelineOptions {
+  now: () => number;
+  onClip: (e: ClipEvent) => void;
+  onFire: (t: Trigger) => void;
+  /** Is the named process running? Used for triggers with `requires`. Omitted: every process counts as running. */
+  isRunning?: (name: string) => boolean;
+}
 
 const SAMPLE_RATE = 16000;
 const KEEP = 15 * SAMPLE_RATE;
@@ -26,6 +34,7 @@ export class Pipeline {
   private storeLength = 0;
   private total = 0; // absolute count of samples fed so far
   private lastFire: number | null = null;
+  private lastBlocked: { triggerIndex: number; at: number } | null = null;
 
   constructor(
     private readonly config: Config,
@@ -70,7 +79,7 @@ export class Pipeline {
     const level = rms(unpadded);
 
     if (seconds > this.config.maxPhraseSeconds) {
-      this.opts.onClip({ text: "", seconds, level, nearest: null, outcome: "too-long", trigger: null });
+      this.opts.onClip({ text: "", seconds, level, nearest: null, outcome: "too-long", trigger: null, forced: false });
       return;
     }
 
@@ -81,19 +90,34 @@ export class Pipeline {
     const text = this.transcriber.transcribe(clip);
     const n = nearest(normalize(text), this.candidates);
     const near = n === null ? null : { phrase: n.phrase, distance: n.distance };
-    const report = (outcome: ClipEvent["outcome"], trigger: Trigger | null) =>
-      this.opts.onClip({ text, seconds, level, nearest: near, outcome, trigger });
+    const report = (outcome: ClipEvent["outcome"], trigger: Trigger | null, forced = false) =>
+      this.opts.onClip({ text, seconds, level, nearest: near, outcome, trigger, forced });
 
     if (n === null || !isMatch(n, this.config.tolerance)) return report("no-match", null);
     const trigger = this.config.triggers[n.triggerIndex];
     const t = this.opts.now();
     if (this.lastFire !== null && t - this.lastFire < this.config.cooldownSeconds * 1000) return report("cooldown", trigger);
-    if (!this.state.allows(trigger)) return report("blocked-by-state", trigger);
+    if (trigger.requires !== undefined && this.opts.isRunning !== undefined && !this.opts.isRunning(trigger.requires)) {
+      return report("not-running", trigger);
+    }
+    let forced = false;
+    if (!this.state.allows(trigger)) {
+      // The tool only remembers what it sent; the app may have been stopped or started another way.
+      // Saying the same phrase again soon after it was ignored overrides that memory.
+      const b = this.lastBlocked;
+      forced = b !== null && b.triggerIndex === n.triggerIndex && this.config.forceRepeatSeconds > 0 &&
+        t - b.at <= this.config.forceRepeatSeconds * 1000;
+      if (!forced) {
+        this.lastBlocked = { triggerIndex: n.triggerIndex, at: t };
+        return report("blocked-by-state", trigger);
+      }
+    }
 
+    this.lastBlocked = null;
     this.opts.onFire(trigger);
     this.state.apply(trigger);
     this.lastFire = this.opts.now();
-    report("fired", trigger);
+    report("fired", trigger, forced);
   }
 }
 

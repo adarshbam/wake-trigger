@@ -175,6 +175,17 @@ While Handy records, the stop phrase is also dictated. The Handy preset document
 - Command-line parsing, logging format, download progress display.
 - Test approach: the matcher, text normalisation, state machine, and config validation are pure functions and get unit tests. The pipeline gets one test that replays a recorded audio file and asserts the trigger sequence.
 
-## Open questions
+## Changes after first live use (2026-11-12)
+
+Live use with Handy exposed three failures. Each has a fix in the tool.
+
+| Failure seen | Cause | Fix |
+|---|---|---|
+| Dictation opened and closed within a second | Two copies of `start` were running; both fired, so Handy got two toggles | `start` takes a lock file (`start.lock` in the home folder, holding the process id). A second copy stops with "already running". A lock left by a killed copy is detected by its dead process id. |
+| "computer listen" only opened the Handy window | Handy was closed; a toggle sent to a closed app just launches it, and the tool's state went wrong | Triggers accept `requires` (a process name). The trigger is skipped, with a message, while that process is not running. The Handy preset sets `requires: "handy.exe"`. |
+| Stop phrase ignored with no way out | The tool's on/off memory was wrong and a state-blocked phrase was always ignored | Repeating a state-blocked phrase within `forceRepeatSeconds` (default 10) fires it anyway. This resolves the open question below: ignore the first time, fire on a deliberate repeat. |
+
+## Open questions (resolved)
+
 
 1. When the stop phrase is heard while the group is off, should the tool ignore it (current design) or fire anyway? Ignoring is safer; firing lets the user recover from a wrong state by voice.

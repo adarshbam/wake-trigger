@@ -2,14 +2,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { ConfigError, configPath, loadConfig } from "./config";
+import { ConfigError, configPath, homeDir, loadConfig } from "./config";
 import type { Config } from "./config";
 import { downloadModels, modelFiles, modelsPresent } from "./models";
 import { listDevices, openMic } from "./mic";
 import { Pipeline } from "./pipeline";
 import { runAction } from "./actions";
 import { preset } from "./presets";
-import { describeError, formatClip, formatIgnored, formatTime } from "./format";
+import { describeError, formatClip, formatFired, formatIgnored, formatNotRunning } from "./format";
+import { acquireLock } from "./lock";
+import { ProcessWatch } from "./processes";
 
 const USAGE = `Usage: wake-trigger <command>
 
@@ -80,6 +82,24 @@ function devices(): void {
 async function listen(mode: "test" | "start"): Promise<void> {
   const config = loadConfig();
   if (!modelsPresent(config.model)) fail("Models missing. Run: wake-trigger setup");
+  if (mode === "start") {
+    // Two listening copies would each fire on the same phrase.
+    let lock;
+    try {
+      lock = acquireLock(path.join(homeDir(), "start.lock"));
+    } catch (e) {
+      fail(describeError(e));
+    }
+    process.on("exit", () => lock.release());
+  }
+  const watch = new ProcessWatch();
+  const required = [...new Set(config.triggers.flatMap((t) => (t.requires === undefined ? [] : [t.requires])))];
+  if (required.length > 0) {
+    await watch.start();
+    for (const name of required) {
+      if (!watch.isRunning(name)) console.log(`Note: ${name} is not running. Its phrases are skipped until it is started.`);
+    }
+  }
   // Loaded lazily: the native library is slow to load and not needed by other commands.
   const { createSegmenter, createTranscriber } = await import("./recognizer");
   const files = modelFiles(config.model);
@@ -87,13 +107,16 @@ async function listen(mode: "test" | "start"): Promise<void> {
     now: Date.now,
     onClip: (e) => {
       if (mode === "test") console.log(formatClip(e));
-      else if (e.trigger !== null && (e.outcome === "cooldown" || e.outcome === "blocked-by-state")) {
+      else if (e.trigger === null) return;
+      else if (e.outcome === "fired") console.log(formatFired(new Date(), e.trigger, e.forced));
+      else if (e.outcome === "not-running") console.log(formatNotRunning(new Date(), e.trigger));
+      else if (e.outcome === "cooldown" || e.outcome === "blocked-by-state") {
         console.log(formatIgnored(new Date(), e.trigger, e.outcome));
       }
     },
+    isRunning: (name) => watch.isRunning(name),
     onFire: (trigger) => {
       if (mode === "test") return;
-      console.log(`[${formatTime(new Date())}] fired "${trigger.phrase}"`);
       runAction(trigger.action).catch((e) =>
         console.error(`Action for "${trigger.phrase}" failed: ${e instanceof Error ? e.message : String(e)}`));
     },

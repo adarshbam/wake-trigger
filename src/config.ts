@@ -6,7 +6,12 @@ import type { Candidate } from "./matcher";
 import { toSendKeys } from "./actions";
 
 export type Action = { run: string; args?: string[] } | { keys: string };
-export interface Trigger { phrase: string; aliases: string[]; group?: string; sets?: "on" | "off"; action: Action }
+export interface Trigger {
+  phrase: string; aliases: string[]; group?: string; sets?: "on" | "off";
+  /** Process name (for example "handy.exe") that must be running for this trigger to fire. */
+  requires?: string;
+  action: Action;
+}
 export interface Config {
   microphone: string;
   model: "moonshine-base-en" | "moonshine-tiny-en";
@@ -14,6 +19,8 @@ export interface Config {
   maxPhraseSeconds: number;
   cooldownSeconds: number;
   maxOnSeconds: number;
+  /** Repeating a phrase that was ignored because of group state, within this many seconds, forces it. 0 disables. */
+  forceRepeatSeconds: number;
   triggers: Trigger[];
 }
 
@@ -78,7 +85,7 @@ function parseAction(v: unknown, field: string): Action {
 function parseTrigger(v: unknown, i: number): Trigger {
   const f = `triggers[${i}]`;
   if (!isObject(v)) throw new ConfigError(`${f} must be an object`);
-  rejectUnknown(v, ["phrase", "aliases", "group", "sets", "action"], `${f}.`);
+  rejectUnknown(v, ["phrase", "aliases", "group", "sets", "requires", "action"], `${f}.`);
   const p = phrase(v.phrase, `${f}.phrase`);
   let aliases: string[] = [];
   if (v.aliases !== undefined) {
@@ -87,6 +94,7 @@ function parseTrigger(v: unknown, i: number): Trigger {
   }
   const trigger: Trigger = { phrase: p, aliases, action: parseAction(v.action, `${f}.action`) };
   if (v.group !== undefined) trigger.group = nonEmptyString(v.group, `${f}.group`);
+  if (v.requires !== undefined) trigger.requires = nonEmptyString(v.requires, `${f}.requires`);
   if (v.sets !== undefined) {
     if (v.sets !== "on" && v.sets !== "off") throw new ConfigError(`${f}.sets must be "on" or "off"`);
     trigger.sets = v.sets;
@@ -102,7 +110,7 @@ function parseTrigger(v: unknown, i: number): Trigger {
 
 export function parseConfig(raw: unknown): Config {
   if (!isObject(raw)) throw new ConfigError("config must be a JSON object");
-  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "triggers"], "");
+  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "forceRepeatSeconds", "triggers"], "");
   const microphone = raw.microphone === undefined ? "default" : nonEmptyString(raw.microphone, "microphone");
   const model = raw.model === undefined ? "moonshine-base-en" : raw.model;
   if (model !== "moonshine-base-en" && model !== "moonshine-tiny-en") {
@@ -112,11 +120,12 @@ export function parseConfig(raw: unknown): Config {
   const maxPhraseSeconds = number(raw, "maxPhraseSeconds", 3, true);
   const cooldownSeconds = number(raw, "cooldownSeconds", 1.5, false);
   const maxOnSeconds = number(raw, "maxOnSeconds", 300, true);
+  const forceRepeatSeconds = number(raw, "forceRepeatSeconds", 10, false);
   if (!Array.isArray(raw.triggers) || raw.triggers.length === 0) {
     throw new ConfigError("triggers must be a non-empty array");
   }
   const triggers = raw.triggers.map(parseTrigger);
-  const config: Config = { microphone, model, tolerance, maxPhraseSeconds, cooldownSeconds, maxOnSeconds, triggers };
+  const config: Config = { microphone, model, tolerance, maxPhraseSeconds, cooldownSeconds, maxOnSeconds, forceRepeatSeconds, triggers };
 
   const cands = candidatesOf(config);
   for (let a = 0; a < cands.length; a++) {
