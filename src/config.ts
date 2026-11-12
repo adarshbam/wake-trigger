@@ -123,6 +123,8 @@ export function candidatesOf(config: Config): Candidate[] {
 }
 
 export function homeDir(): string {
+  const override = process.env.WAKE_TRIGGER_HOME;
+  if (override) return override;
   return path.join(os.homedir(), ".wake-trigger");
 }
 

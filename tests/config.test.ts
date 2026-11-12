@@ -69,6 +69,19 @@ describe("paths and loadConfig", () => {
     expect(configPath()).toBe(path.join(homeDir(), "config.json"));
   });
 
+  it("WAKE_TRIGGER_HOME overrides the home folder", () => {
+    const old = process.env.WAKE_TRIGGER_HOME;
+    try {
+      process.env.WAKE_TRIGGER_HOME = path.join(os.tmpdir(), "wt-home");
+      expect(homeDir()).toBe(path.join(os.tmpdir(), "wt-home"));
+      process.env.WAKE_TRIGGER_HOME = "";
+      expect(homeDir()).toBe(path.join(os.homedir(), ".wake-trigger"));
+    } finally {
+      if (old === undefined) delete process.env.WAKE_TRIGGER_HOME;
+      else process.env.WAKE_TRIGGER_HOME = old;
+    }
+  });
+
   it("missing file tells user to run init", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wt-"));
     try {
