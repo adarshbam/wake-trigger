@@ -2,14 +2,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { configPath, loadConfig } from "./config";
+import { ConfigError, configPath, loadConfig } from "./config";
 import type { Config } from "./config";
 import { downloadModels, modelFiles, modelsPresent } from "./models";
 import { listDevices, openMic } from "./mic";
 import { Pipeline } from "./pipeline";
 import { runAction } from "./actions";
 import { preset } from "./presets";
-import { formatClip, formatTime } from "./format";
+import { describeError, formatClip, formatIgnored, formatTime } from "./format";
 
 const USAGE = `Usage: wake-trigger <command>
 
@@ -47,11 +47,15 @@ function init(args: string[]): void {
 
 async function setup(): Promise<void> {
   let model: Config["model"] = "moonshine-base-en";
-  try {
-    model = loadConfig().model;
-  } catch {
-    // no usable config yet: use the default model
+  if (fs.existsSync(configPath())) {
+    try {
+      model = loadConfig().model;
+    } catch (e) {
+      if (e instanceof ConfigError) fail(e.message);
+      throw e;
+    }
   }
+  // else: no config yet, use the default model
   if (modelsPresent(model)) {
     console.log(`Models for ${model} are already present.`);
     return;
@@ -68,7 +72,9 @@ async function setup(): Promise<void> {
 }
 
 function devices(): void {
-  for (const d of listDevices()) console.log(d);
+  const found = listDevices();
+  if (found.length === 0) console.log("(no microphones found)");
+  for (const d of found) console.log(d);
 }
 
 async function listen(mode: "test" | "start"): Promise<void> {
@@ -81,6 +87,9 @@ async function listen(mode: "test" | "start"): Promise<void> {
     now: Date.now,
     onClip: (e) => {
       if (mode === "test") console.log(formatClip(e));
+      else if (e.trigger !== null && (e.outcome === "cooldown" || e.outcome === "blocked-by-state")) {
+        console.log(formatIgnored(new Date(), e.trigger, e.outcome));
+      }
     },
     onFire: (trigger) => {
       if (mode === "test") return;
@@ -110,6 +119,15 @@ async function listen(mode: "test" | "start"): Promise<void> {
   });
 }
 
+function noArguments(command: string, rest: string[]): void {
+  if (rest.length > 0) {
+    console.error(`Unexpected argument "${rest[0]}" for "${command}".
+
+${USAGE}`);
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   switch (command) {
@@ -119,10 +137,10 @@ async function main(): Promise<void> {
       console.log(USAGE);
       return;
     case "init": return init(rest);
-    case "setup": return setup();
-    case "devices": return devices();
+    case "setup": noArguments(command, rest); return setup();
+    case "devices": noArguments(command, rest); return devices();
     case "test":
-    case "start": return listen(command);
+    case "start": noArguments(command, rest); return listen(command);
     default:
       console.error(`Unknown command: ${command}\n\n${USAGE}`);
       process.exit(1);
@@ -130,5 +148,5 @@ async function main(): Promise<void> {
 }
 
 main().catch((e) => {
-  fail(e instanceof Error ? e.message : String(e));
+  fail(describeError(e));
 });

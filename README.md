@@ -2,7 +2,7 @@
 
 wake-trigger listens to your microphone and runs an action when it hears a phrase you chose. It works like "Hey Google" or "Hey Siri", but the phrases are plain text in a config file and the action can start any program or press any hotkey. It runs fully on your machine. It needs no account and no API key.
 
-It exists because of Handy, an open-source dictation app (https://github.com/cjpais/Handy). Handy starts and stops only with a keyboard shortcut, and it has no wake word. The author wanted to start and stop dictation by voice while writing outreach messages. Instead of patching one app, wake-trigger works with any app, and it ships with a ready-made Handy preset.
+It exists because of Handy, an open-source dictation app (https://github.com/cjpais/Handy). Handy has no wake word; it starts and stops with a keyboard shortcut or a command-line toggle. The author wanted to start and stop dictation by voice while writing outreach messages. Instead of patching one app, wake-trigger works with any app, and it ships with a ready-made Handy preset.
 
 ## Quick start
 
@@ -42,7 +42,7 @@ macOS and Linux are untested. The code does not block them, but `keys` actions w
 | `wake-trigger setup` | Downloads the voice-activity model and the speech model into `~/.wake-trigger/models`. |
 | `wake-trigger devices` | Lists microphones. |
 | `wake-trigger test` | Listens and prints one line per clip. Runs no actions. |
-| `wake-trigger start` | Listens and runs actions. Logs each trigger that fires. |
+| `wake-trigger start` | Listens and runs actions. Logs each trigger that fires, and each match that was ignored because of the cooldown or the group state, for example `[12:00:01] ignored "computer finish" (blocked-by-state)`. |
 | `wake-trigger --help` | Shows the usage text. |
 
 `start` and `test` print `Models missing. Run: wake-trigger setup` when the models are not there.
@@ -66,7 +66,7 @@ A voice-activity detector (Silero VAD) cuts the audio into one clip per utteranc
 
 Only short clips are transcribed. A clip longer than `maxPhraseSeconds` is normal conversation and is skipped. This is what keeps false triggers rare.
 
-A clip matches a phrase when its text is within `tolerance` character edits of the phrase or one of its aliases. It also matches when it starts with the phrase and has at most three extra letters ("computer listening"). The closest phrase wins. If two different triggers tie, nothing happens.
+A clip matches a phrase when its text is within `tolerance` character edits of the phrase or one of its aliases. It also matches when it starts with the phrase and has at most three extra characters (spaces count), as in "computer listening". The closest phrase wins. If two different triggers tie, nothing happens.
 
 Two config checks run at start. A phrase must contain at least one letter. Two triggers whose phrases are within `tolerance` edits of each other are rejected, because they could not be told apart.
 
@@ -79,9 +79,7 @@ wake-trigger uses these libraries:
 
 The config is one JSON file at `~/.wake-trigger/config.json`. Set the environment variable `WAKE_TRIGGER_HOME` to use another directory. The config file and the `models` folder then live there.
 
-Save the file as UTF-8 without a byte order mark (BOM). Some Windows editors add a BOM by default. Check your editor setting.
-
-If the config is invalid, the program stops at start with a message that names the field.
+If the config is invalid, the program stops at start with a message that names the field. A field name that is not listed below (for example a typo such as `tolernace`) is an error, and so is an invalid `keys` string. If you change `model`, run `wake-trigger setup` again to download the new model.
 
 ### Top-level fields
 
@@ -177,6 +175,7 @@ The outcome is one of `fired`, `no-match`, `too-long`, `cooldown` or `blocked-by
 What works, from testing:
 
 - Use two-syllable common words. "Listen" and "finish" work. One-syllable words such as "stop" and "done" failed.
+- Avoid very short, one-word phrases. They are easy to trigger by accident and easy to mishear.
 - Use common words. Rare words are heard as common ones. "Handy" was misheard.
 - Add aliases for sound-alikes. If the program hears "right" for "write", add the heard spelling to `aliases`.
 - Raise the microphone volume if `test` prints `(input level is low; raise microphone volume)`. A quiet microphone lowers every score.
@@ -214,9 +213,9 @@ wake-trigger is not as accurate as the wake word on a phone. If a phrase is miss
 Autostart is not automated. To do it by hand on Windows:
 
 1. Press Win+R, type `shell:startup`, and press Enter. The Startup folder opens.
-2. Create a shortcut in that folder. Set its target to `cmd.exe /c wake-trigger start`.
+2. Create a shortcut in that folder. Set its target to `cmd.exe /k wake-trigger start`.
 
-This uses `wake-trigger` from your PATH, so run `npm link` first. A console window stays open while it runs. Close it to stop wake-trigger. This setup has not been tested.
+This uses `wake-trigger` from your PATH, so run `npm link` first. A console window stays open while it runs, and `/k` keeps it open if an error stops the program at login. Close it to stop wake-trigger. This setup has not been tested.
 
 ## Privacy
 

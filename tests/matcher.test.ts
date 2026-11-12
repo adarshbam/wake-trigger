@@ -13,6 +13,10 @@ describe("nearest", () => {
   it("prefix rule limited to 3 extra letters", () => {
     expect(nearest("computer listen to me now", c)!.distance).toBeGreaterThan(2);
   });
+  it("prefix rule boundary: 3 extra characters give 1, 4 give 4", () => {
+    expect(nearest("computer listenabc", c)).toMatchObject({ triggerIndex: 0, distance: 1 });
+    expect(nearest("computer listenabcd", c)).toMatchObject({ triggerIndex: 0, distance: 4 });
+  });
   it("unrelated text is far", () => {
     expect(nearest("start the division", c)!.distance).toBeGreaterThan(2);
   });

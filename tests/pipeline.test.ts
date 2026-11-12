@@ -133,13 +133,28 @@ describe("Pipeline", () => {
   });
 
   it("keeps indexes right after a long run", () => {
-    for (let i = 0; i < (60 * 16000) / 512; i++) pipeline.feed(new Float32Array(512));
-    const total = 3 * 16000 + Math.floor((60 * 16000) / 512) * 512;
-    const p = pipeline;
-    queuedSegments = [{ start: total - 20000, length: 8000 }];
-    queuedTexts = ["computer listen"];
-    p.feed(new Float32Array(512));
-    expect(events[0].outcome).toBe("fired");
-    expect(clipLengths).toEqual([8000 + 2 * 4800]);
+    // Ramp audio: the value of each sample is derived from its absolute index.
+    const ramp = (i: number) => (i % 1000) / 1000;
+    const received: Float32Array[] = [];
+    const capture: Transcriber = { transcribe(samples) { received.push(samples); return "computer listen"; } };
+    const p = new Pipeline(config, segmenter, capture, { now, onClip: (e) => events.push(e), onFire: () => {} });
+    let index = 0;
+    const feedRamp = (n: number) => {
+      const chunk = new Float32Array(n);
+      for (let i = 0; i < n; i++) chunk[i] = ramp(index + i);
+      index += n;
+      p.feed(chunk);
+    };
+    for (let i = 0; i < (60 * 16000) / 512; i++) feedRamp(512);
+    const start = index - 20000;
+    const length = 8000;
+    queuedSegments = [{ start, length }];
+    feedRamp(512);
+    expect(events.at(-1)!.outcome).toBe("fired");
+    expect(received).toHaveLength(1);
+    const clip = received[0];
+    expect(clip.length).toBe(length + 2 * 4800);
+    expect(clip[0]).toBeCloseTo(ramp(start - 4800), 6);
+    expect(clip[clip.length - 1]).toBeCloseTo(ramp(start + length + 4800 - 1), 6);
   });
 });
