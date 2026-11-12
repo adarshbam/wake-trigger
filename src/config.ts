@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { normalize, editDistance } from "./normalize";
 import type { Candidate } from "./matcher";
+import { toSendKeys } from "./actions";
 
 export type Action = { run: string; args?: string[] } | { keys: string };
 export interface Trigger { phrase: string; aliases: string[]; group?: string; sets?: "on" | "off"; action: Action }
@@ -33,6 +34,12 @@ function number(obj: Obj, key: string, def: number, positive: boolean): number {
   return v;
 }
 
+function rejectUnknown(obj: Obj, allowed: string[], prefix: string): void {
+  for (const key of Object.keys(obj)) {
+    if (!allowed.includes(key)) throw new ConfigError(`unknown field "${prefix}${key}"`);
+  }
+}
+
 function nonEmptyString(v: unknown, field: string): string {
   if (typeof v !== "string" || v === "") throw new ConfigError(`${field} must be a non-empty string`);
   return v;
@@ -50,7 +57,16 @@ function parseAction(v: unknown, field: string): Action {
   const hasRun = v.run !== undefined;
   const hasKeys = v.keys !== undefined;
   if (hasRun === hasKeys) throw new ConfigError(`${field} must have exactly one of "run" or "keys"`);
-  if (hasKeys) return { keys: nonEmptyString(v.keys, `${field}.keys`) };
+  rejectUnknown(v, hasKeys ? ["keys"] : ["run", "args"], `${field}.`);
+  if (hasKeys) {
+    const keys = nonEmptyString(v.keys, `${field}.keys`);
+    try {
+      toSendKeys(keys);
+    } catch (e) {
+      throw new ConfigError(`${field}.keys: ${(e as Error).message}`);
+    }
+    return { keys };
+  }
   const run = nonEmptyString(v.run, `${field}.run`);
   if (v.args === undefined) return { run };
   if (!Array.isArray(v.args) || !v.args.every((a) => typeof a === "string")) {
@@ -62,6 +78,7 @@ function parseAction(v: unknown, field: string): Action {
 function parseTrigger(v: unknown, i: number): Trigger {
   const f = `triggers[${i}]`;
   if (!isObject(v)) throw new ConfigError(`${f} must be an object`);
+  rejectUnknown(v, ["phrase", "aliases", "group", "sets", "action"], `${f}.`);
   const p = phrase(v.phrase, `${f}.phrase`);
   let aliases: string[] = [];
   if (v.aliases !== undefined) {
@@ -85,6 +102,7 @@ function parseTrigger(v: unknown, i: number): Trigger {
 
 export function parseConfig(raw: unknown): Config {
   if (!isObject(raw)) throw new ConfigError("config must be a JSON object");
+  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "triggers"], "");
   const microphone = raw.microphone === undefined ? "default" : nonEmptyString(raw.microphone, "microphone");
   const model = raw.model === undefined ? "moonshine-base-en" : raw.model;
   if (model !== "moonshine-base-en" && model !== "moonshine-tiny-en") {
@@ -135,7 +153,7 @@ export function configPath(): string {
 export function loadConfig(file: string = configPath()): Config {
   let text: string;
   try {
-    text = fs.readFileSync(file, "utf8");
+    text = fs.readFileSync(file, "utf8").replace(/^﻿/, "");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
       throw new ConfigError(`config file not found: ${file}. Run \`wake-trigger init\` to create it.`);

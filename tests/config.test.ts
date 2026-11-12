@@ -63,10 +63,46 @@ describe("parseConfig", () => {
   });
 });
 
+describe("keys and unknown fields", () => {
+  it("rejects an invalid keys string at load, naming the field", () => {
+    expect(() => parseConfig({ triggers: [{ phrase: "a b", action: { keys: "ctrl+banana" } }] }))
+      .toThrow(/triggers\[0\]\.action\.keys/);
+    expect(parseConfig({ triggers: [{ phrase: "a b", action: { keys: "ctrl+shift+space" } }] }).triggers).toHaveLength(1);
+  });
+
+  it("rejects an unknown key at the top level", () => {
+    expect(() => parseConfig({ tolernace: 1, triggers: [t("a b")] })).toThrow(/unknown field "tolernace"/);
+  });
+
+  it("rejects an unknown key in a trigger", () => {
+    expect(() => parseConfig({ triggers: [{ ...t("a b"), alias: ["x"] }] })).toThrow(/unknown field "triggers\[0\]\.alias"/);
+  });
+
+  it("rejects an unknown key in an action", () => {
+    expect(() => parseConfig({ triggers: [{ phrase: "a b", action: { run: "x", arg: [] } }] }))
+      .toThrow(/unknown field "triggers\[0\]\.action\.arg"/);
+  });
+});
+
 describe("paths and loadConfig", () => {
+  it("loads a file with a UTF-8 BOM", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wt-"));
+    try {
+      const f = path.join(dir, "bom.json");
+      fs.writeFileSync(f, "﻿" + JSON.stringify({ triggers: [t("a b")] }));
+      expect(loadConfig(f).triggers).toHaveLength(1);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it("builds home paths", () => {
-    expect(homeDir()).toBe(path.join(os.homedir(), ".wake-trigger"));
-    expect(configPath()).toBe(path.join(homeDir(), "config.json"));
+    const old = process.env.WAKE_TRIGGER_HOME;
+    delete process.env.WAKE_TRIGGER_HOME;
+    try {
+      expect(homeDir()).toBe(path.join(os.homedir(), ".wake-trigger"));
+      expect(configPath()).toBe(path.join(homeDir(), "config.json"));
+    } finally {
+      if (old !== undefined) process.env.WAKE_TRIGGER_HOME = old;
+    }
   });
 
   it("WAKE_TRIGGER_HOME overrides the home folder", () => {
