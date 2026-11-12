@@ -31,11 +31,11 @@ export function toSendKeys(keys: string): string {
   const key = parts[parts.length - 1];
   let out = "";
   for (const mod of parts.slice(0, -1)) {
-    const code = MODIFIERS[mod];
+    const code = Object.hasOwn(MODIFIERS, mod) ? MODIFIERS[mod] : undefined;
     if (code === undefined) throw new Error(`Unknown modifier "${mod}" in keys "${keys}" (supported: ctrl, shift, alt)`);
     out += code;
   }
-  if (key in NAMED_KEYS) return out + NAMED_KEYS[key];
+  if (Object.hasOwn(NAMED_KEYS, key)) return out + NAMED_KEYS[key];
   if (/^[a-z0-9]$/.test(key)) return out + key;
   throw new Error(`Unknown key "${key}" in keys "${keys}"`);
 }

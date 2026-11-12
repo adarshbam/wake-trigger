@@ -43,6 +43,12 @@ describe("toSendKeys", () => {
   it("throws for the win key", () => {
     expect(() => toSendKeys("win+r")).toThrow(/win/);
   });
+  it("throws for inherited property names as a key", () => {
+    expect(() => toSendKeys("constructor")).toThrow(/constructor/);
+  });
+  it("throws for inherited property names as a modifier", () => {
+    expect(() => toSendKeys("ctrl+constructor+a")).toThrow(/constructor/);
+  });
   it("throws for an empty string", () => {
     expect(() => toSendKeys("")).toThrow(Error);
   });
@@ -51,12 +57,12 @@ describe("toSendKeys", () => {
 describe("runAction", () => {
   it("spawns a program without a shell, detached", async () => {
     const { fake, calls } = makeFake(spawns);
-    await runAction({ run: "C:\app.exe", args: ["--toggle"] }, fake, "win32");
-    expect(calls[0]).toMatchObject({ cmd: "C:\app.exe", args: ["--toggle"], opts: { shell: false, detached: true, stdio: "ignore" } });
+    await runAction({ run: "C:\\app.exe", args: ["--toggle"] }, fake, "win32");
+    expect(calls[0]).toMatchObject({ cmd: "C:\\app.exe", args: ["--toggle"], opts: { shell: false, detached: true, stdio: "ignore" } });
   });
   it("rejects with the program path when the child errors", async () => {
     const { fake } = makeFake(enoent);
-    await expect(runAction({ run: "C:\missing.exe" }, fake, "win32")).rejects.toThrow(/missing\.exe/);
+    await expect(runAction({ run: "C:\\missing.exe" }, fake, "win32")).rejects.toThrow(/missing\.exe/);
   });
   it("rejects keys on non-Windows platforms", async () => {
     const { fake } = makeFake(exits(0));
