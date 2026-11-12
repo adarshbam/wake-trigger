@@ -23,6 +23,7 @@
     "vitest": "^5.1.0"
   },
   "dependencies": {
-    "@picovoice/pvrecorder-node": "^1.2.9"
+    "@picovoice/pvrecorder-node": "^1.2.9",
+    "sherpa-onnx-node": "2.0.1"
   }
 }
