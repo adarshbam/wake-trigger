@@ -1,7 +1,31 @@
 {
   "name": "wake-trigger",
   "version": "0.1.0",
+  "description": "Wake-word trigger for any app: say a phrase, run a command or press a hotkey. Local, offline, no API key.",
+  "keywords": [
+    "wake-word",
+    "voice",
+    "voice-control",
+    "speech-recognition",
+    "hotword",
+    "automation",
+    "dictation",
+    "handy",
+    "sherpa-onnx",
+    "moonshine",
+    "cli",
+    "windows"
+  ],
+  "author": "Adarsh Singh",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adarshbam/wake-trigger.git"
+  },
+  "homepage": "https://github.com/adarshbam/wake-trigger#readme",
+  "bugs": {
+    "url": "https://github.com/adarshbam/wake-trigger/issues"
+  },
   "engines": {
     "node": ">=20"
   },

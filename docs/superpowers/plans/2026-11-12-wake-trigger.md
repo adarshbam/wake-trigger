@@ -474,7 +474,7 @@ expect(() => parseConfig(preset("default"))).not.toThrow();   // default: same p
 
 ```
 npm run build && npm link
-wake-trigger init --preset handy --handy-path "C:\Users\Dell\Applications\Handy\handy.exe"
+wake-trigger init --preset handy --handy-path "C:\Users\<you>\Applications\Handy\handy.exe"
 wake-trigger setup          # expect both downloads to finish; ~/.wake-trigger/models has silero_vad.onnx and moonshine-base-en/
 wake-trigger devices        # expect at least one microphone
 wake-trigger test           # say "computer listen": expect outcome fired; normal sentence: expect too-long or no-match

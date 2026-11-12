@@ -4,10 +4,31 @@ wake-trigger listens to your microphone and runs an action when it hears a phras
 
 It exists because of Handy, an open-source dictation app (https://github.com/cjpais/Handy). Handy has no wake word; it starts and stops with a keyboard shortcut or a command-line toggle. The author wanted to start and stop dictation by voice while writing outreach messages. Instead of patching one app, wake-trigger works with any app, and it ships with a ready-made Handy preset.
 
+```
+you:    "computer listen"
+        -> dictation starts
+you:    (dictate a message)
+you:    "computer finish"
+        -> dictation stops, the cleaned text is pasted
+```
+
+## Contents
+
+- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [Config reference](#config-reference)
+- [Handy preset](#handy-preset)
+- [Choosing phrases](#choosing-phrases)
+- [Measured accuracy](#measured-accuracy)
+- [Limits](#limits)
+- [Running at login](#running-at-login)
+- [Privacy](#privacy)
+- [Development](#development)
+
 ## Quick start
 
 ```
-git clone https://github.com/<your-username>/wake-trigger.git
+git clone https://github.com/adarshbam/wake-trigger.git
 cd wake-trigger
 npm install && npm run build && npm link
 wake-trigger init && wake-trigger setup && wake-trigger test
@@ -181,10 +202,10 @@ The preset defines two phrases:
 
 Both run `handy.exe --toggle-post-process`. This Handy flag toggles recording with post-processing. Handy's command line only toggles. It cannot tell wake-trigger whether it is recording. That is why the preset uses a group. Both triggers also set `requires: "handy.exe"`, so nothing is sent while Handy is closed. Start Handy first.
 
-While Handy records, it also hears you say "computer finish", so the phrase ends up in the text. Add this line to Handy's post-processing prompt to remove it:
+While Handy records, it also hears you say "computer finish", so the phrase ends up in the text. Add this to Handy's post-processing prompt (Settings, Post Process) to remove it. List the phrases and aliases from your own config:
 
 ```
-If the transcript ends with "computer finish", remove that phrase.
+If the transcript ends with one or more spoken stop commands, remove them from the output; they are a voice command, not dictation. Stop commands are: "computer finish", "computer finished", "computer stop", and close mishearings of these at the very end of the transcript. Do the same for a start command at the very beginning ("computer listen", "computer listening").
 ```
 
 In raw mode, without post-processing, the phrase stays in the text. This is a known limit.
@@ -205,6 +226,7 @@ What works, from testing:
 - Avoid very short, one-word phrases. They are easy to trigger by accident and easy to mishear.
 - Use common words. Rare words are heard as common ones. "Handy" was misheard.
 - Add aliases for sound-alikes. If the program hears "right" for "write", add the heard spelling to `aliases`.
+- Add aliases for what `test` hears from you. A speech model mishears each voice in its own way. The author's config lists "come to listen" and "combator finish", because that is what the model printed for some attempts. Ten aliases per phrase is normal.
 - Raise the microphone volume if `test` prints `(input level is low; raise microphone volume)`. A quiet microphone lowers every score.
 - Say the phrase on its own. Clips longer than `maxPhraseSeconds` are skipped.
 
@@ -235,6 +257,7 @@ wake-trigger is not as accurate as the wake word on a phone. If a phrase is miss
 - Handy must already be running. The first recording right after Handy launches can misfire.
 - Phrases are fixed triggers. There are no voice commands with parameters.
 - There is no graphical interface and no tray icon.
+- Unplugging the microphone while the program runs is untested. The program is written to stop with `Microphone error`, but this was not checked on hardware.
 
 ## Running at login
 
@@ -262,7 +285,49 @@ Limits: Windows only. If the microphone is not ready at sign-in, the program sto
 - Audio is processed in memory on your machine. No audio is written to disk.
 - No audio and no text leave your machine.
 - The only network use is `wake-trigger setup`, which downloads the models from the k2-fsa/sherpa-onnx GitHub releases.
-- The program logs the time and phrase of each trigger to the console. It stores nothing else.
+- The program logs the time and phrase of each trigger to the console, or to `~/.wake-trigger/wake-trigger.log` when it was started at sign-in. It stores nothing else. Speech that matches no phrase is not logged.
+
+## Development
+
+```
+npm install
+npm test          # unit tests; two integration tests run only when the models and a local audio fixture exist
+npm run build     # compiles src/ to dist/
+npm run dev -- test
+```
+
+| File | Responsibility |
+|---|---|
+| `src/cli.ts` | Commands. |
+| `src/mic.ts` | Microphone capture. |
+| `src/recognizer.ts` | The only file that touches the native speech library. |
+| `src/pipeline.ts` | Clip handling: pad, length gate, transcribe, match, state, cooldown. |
+| `src/matcher.ts`, `src/normalize.ts` | Fuzzy phrase matching. |
+| `src/state.ts` | Group on/off memory. |
+| `src/actions.ts` | Run a program, press a hotkey. |
+| `src/config.ts`, `src/presets.ts` | Config validation and starter configs. |
+| `src/models.ts` | Model download. |
+| `src/lock.ts`, `src/processes.ts`, `src/autostart.ts` | Single running copy, process check, start at sign-in. |
+
+The pipeline depends on two small interfaces, `Segmenter` and `Transcriber`, so its logic is tested with fakes and no microphone.
+
+The design document, with the approaches that were tried and rejected and the measurements behind each decision, is in [`docs/superpowers/specs`](docs/superpowers/specs/2026-11-12-wake-trigger-design.md).
+
+### Ideas not built yet
+
+- Tray icon with on/off state.
+- macOS and Linux testing; `keys` actions outside Windows.
+- Other languages (the Moonshine models used here are English only).
+- A published npm package.
+- An opt-in way to save missed clips, to tune aliases faster.
+
+Issues and pull requests are welcome.
+
+## Acknowledgements
+
+- [Handy](https://github.com/cjpais/Handy), the dictation app this was built around.
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), Silero VAD and Moonshine, for local speech recognition.
+- [pvrecorder](https://github.com/Picovoice/pvrecorder) for microphone capture.
 
 ## Licence
 

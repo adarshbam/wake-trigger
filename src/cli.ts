@@ -67,13 +67,16 @@ async function setup(): Promise<void> {
     return;
   }
   let last = "";
-  await downloadModels(model, (file, done, total) => {
-    if (file !== last && last !== "") process.stdout.write("\n");
-    last = file;
-    const pct = total > 0 ? ` ${Math.floor((done / total) * 100)}%` : "";
-    process.stdout.write(`\rDownloading ${file}${pct}   `);
-  });
-  if (last !== "") process.stdout.write("\n");
+  try {
+    await downloadModels(model, (file, done, total) => {
+      if (file !== last && last !== "") process.stdout.write("\n");
+      last = file;
+      const pct = total > 0 ? ` ${Math.floor((done / total) * 100)}%` : "";
+      process.stdout.write(`\rDownloading ${file}${pct}   `);
+    });
+  } finally {
+    if (last !== "") process.stdout.write("\n"); // end the in-place progress line, also before an error message
+  }
   console.log("Models ready.");
 }
 
