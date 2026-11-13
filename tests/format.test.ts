@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { formatClip, describeError, formatFired, formatIgnored, formatNotRunning, formatTime } from "../src/format";
 import type { ClipEvent } from "../src/pipeline";
 
-const base: ClipEvent = { text: "computer listen", seconds: 1.234, level: 0.0456, nearest: { phrase: "computer listen", distance: 0 }, outcome: "fired", trigger: null, forced: false };
+const base: ClipEvent = { text: "computer listen", seconds: 1.234, level: 0.0456, nearest: { phrase: "computer listen", distance: 0 }, outcome: "fired", trigger: null, forced: false, atEnd: false };
 
 describe("formatClip", () => {
   it("formats a full line", () => {
@@ -29,6 +29,13 @@ describe("formatIgnored", () => {
     const d = new Date(2026, 0, 1, 3, 4, 5);
     expect(formatIgnored(d, trigger, "blocked-by-state")).toBe('[03:04:05] ignored "computer listen" (blocked-by-state; say it again to force)');
     expect(formatIgnored(d, trigger, "cooldown")).toBe('[03:04:05] ignored "computer listen" (cooldown)');
+  });
+});
+
+describe("formatClip at end of long speech", () => {
+  it("marks a match found at the end, and leaves too-long plain", () => {
+    expect(formatClip({ ...base, seconds: 6.8, atEnd: true })).toContain("-> fired (at end of long speech)");
+    expect(formatClip({ ...base, seconds: 6.8, atEnd: true, outcome: "too-long" })).toMatch(/-> too-long$/);
   });
 });
 

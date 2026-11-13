@@ -1,7 +1,7 @@
 import { candidatesOf } from "./config";
 import type { Config, Trigger } from "./config";
 import { isMatch, nearest } from "./matcher";
-import type { Candidate } from "./matcher";
+import type { Candidate, Nearest } from "./matcher";
 import { normalize } from "./normalize";
 import type { Segmenter, Transcriber } from "./recognizer";
 import { GroupState } from "./state";
@@ -13,6 +13,8 @@ export interface ClipEvent {
   trigger: Trigger | null;
   /** True when a fire happened only because the phrase was repeated after being blocked by state. */
   forced: boolean;
+  /** True when the clip was longer than maxPhraseSeconds and only its end was transcribed and matched. */
+  atEnd: boolean;
 }
 export interface PipelineOptions {
   now: () => number;
@@ -83,22 +85,26 @@ export class Pipeline {
     const unpadded = this.slice(Math.min(this.total, Math.max(held, start)), Math.min(this.total, Math.max(held, start + length)));
     const level = rms(unpadded);
 
-    if (seconds > this.config.maxPhraseSeconds) {
-      this.opts.onClip({ text: "", seconds, level, nearest: null, outcome: "too-long", trigger: null, forced: false });
+    const atEnd = seconds > this.config.maxPhraseSeconds;
+    if (atEnd && !this.config.matchAtEnd) {
+      this.opts.onClip({ text: "", seconds, level, nearest: null, outcome: "too-long", trigger: null, forced: false, atEnd: false });
       return;
     }
 
+    // Long speech: a phrase said without a pause before it sits at the end of the clip.
+    // Transcribe only the last maxPhraseSeconds and compare its last words with each phrase.
+    const from = atEnd ? start + length - Math.round(this.config.maxPhraseSeconds * SAMPLE_RATE) : start - PAD;
     const clip = this.slice(
-      Math.min(this.total, Math.max(held, start - PAD)),
+      Math.min(this.total, Math.max(held, from)),
       Math.min(this.total, Math.max(held, start + length + PAD)),
     );
     const text = this.transcriber.transcribe(clip);
-    const n = nearest(normalize(text), this.candidates);
+    const n = atEnd ? nearestAtEnd(normalize(text), this.candidates) : nearest(normalize(text), this.candidates);
     const near = n === null ? null : { phrase: n.phrase, distance: n.distance };
     const report = (outcome: ClipEvent["outcome"], trigger: Trigger | null, forced = false) =>
-      this.opts.onClip({ text, seconds, level, nearest: near, outcome, trigger, forced });
+      this.opts.onClip({ text, seconds, level, nearest: near, outcome, trigger, forced, atEnd });
 
-    if (n === null || !isMatch(n, this.config.tolerance)) return report("no-match", null);
+    if (n === null || !isMatch(n, this.config.tolerance)) return report(atEnd ? "too-long" : "no-match", null);
     const trigger = this.config.triggers[n.triggerIndex];
     const t = this.opts.now();
     if (this.lastFire !== null && t - this.lastFire < this.config.cooldownSeconds * 1000) return report("cooldown", trigger);
@@ -125,6 +131,22 @@ export class Pipeline {
     this.lastFire = this.opts.now();
     report(missing ? "launching" : "fired", trigger, forced);
   }
+}
+
+/** Best match between the last words of the text and the phrases, comparing like with like in word count. */
+function nearestAtEnd(text: string, candidates: Candidate[]): Nearest | null {
+  if (text === "") return null;
+  const words = text.split(" ");
+  const found: Nearest[] = [];
+  for (const count of new Set(candidates.map((c) => c.phrase.split(" ").length))) {
+    const sameLength = candidates.filter((c) => c.phrase.split(" ").length === count);
+    const n = nearest(words.slice(-count).join(" "), sameLength);
+    if (n !== null) found.push(n);
+  }
+  if (found.length === 0) return null;
+  const best = found.reduce((a, b) => (b.distance < a.distance ? b : a));
+  const tie = found.some((n) => n.distance === best.distance && n.triggerIndex !== best.triggerIndex);
+  return tie ? { ...best, ambiguous: true } : best;
 }
 
 function rms(samples: Float32Array): number {

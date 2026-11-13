@@ -88,7 +88,9 @@ microphone (16 kHz mono)
 
 A voice-activity detector (Silero VAD) cuts the audio into one clip per utterance. A small speech model (Moonshine) turns each short clip into text. The text is compared with your phrases.
 
-Only short clips are transcribed. A clip longer than `maxPhraseSeconds` is normal conversation and is skipped. This is what keeps false triggers rare.
+A short clip is transcribed whole and must be the phrase and nothing else. This is what keeps false triggers rare.
+
+A clip longer than `maxPhraseSeconds` is normal conversation. Only its last `maxPhraseSeconds` are transcribed, and only its last words are compared with the phrases. This catches a phrase said without a pause before it: "...and that is everything. Computer finish." A phrase in the middle of a sentence does not match. Set `matchAtEnd` to `false` to skip long clips completely.
 
 A clip matches a phrase when its text is within `tolerance` character edits of the phrase or one of its aliases. It also matches when it starts with the phrase and has at most three extra characters (spaces count), as in "computer listening". The closest phrase wins. If two different triggers tie, nothing happens.
 
@@ -117,6 +119,7 @@ If the config is invalid, the program stops at start with a message that names t
 | `maxOnSeconds` | number, above 0 | `300` | A group that was turned on returns to off after this many seconds. |
 | `forceRepeatSeconds` | number, 0 or more | `10` | A phrase ignored because of group state fires anyway when it is said again within this time. `0` turns this off. |
 | `launchWaitSeconds` | number, 0 or more | `5` | After a program was started by `launch`, wait this long before sending it the action. |
+| `matchAtEnd` | `true` or `false` | `true` | Also look for a phrase at the end of speech longer than `maxPhraseSeconds`. |
 | `triggers` | array, not empty | none | The list of triggers. Required. |
 
 ### Trigger fields
@@ -255,7 +258,7 @@ What works, from testing:
 - Add aliases for sound-alikes. If the program hears "right" for "write", add the heard spelling to `aliases`.
 - Add aliases for what `test` hears from you. A speech model mishears each voice in its own way. The author's config lists "come to listen" and "combator finish", because that is what the model printed for some attempts. Ten aliases per phrase is normal.
 - Raise the microphone volume if `test` prints `(input level is low; raise microphone volume)`. A quiet microphone lowers every score.
-- Say the phrase on its own. Clips longer than `maxPhraseSeconds` are skipped.
+- Pause after the phrase. The clip ends when you stop talking for about half a second. A pause before the phrase is not needed.
 
 ## Measured accuracy
 

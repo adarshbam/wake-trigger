@@ -187,6 +187,8 @@ Live use with Handy exposed three failures. Each has a fix in the tool.
 
 A fourth change followed. Skipping phrases while the app is closed was safe but left the user to open the app by hand, and the app had closed without notice. Triggers now accept `launch`: when the `requires` process is not running, the tool starts that program, waits for the process to appear, waits `launchWaitSeconds` (default 5), then sends the action. Measured with Handy: closed to recording in about 7 seconds.
 
+A fifth change: the stop phrase often needed many attempts. Cause, reproduced on recorded audio: without a pause of about half a second before the phrase, the voice-activity detector joined it to the dictated sentence, the clip exceeded `maxPhraseSeconds`, and it was skipped. Long clips now have their last `maxPhraseSeconds` transcribed and their last words compared with the phrases (`matchAtEnd`, default on). On the same audio a 0.1 s pause now fires; normal long speech still does not.
+
 ## Open questions (resolved)
 
 

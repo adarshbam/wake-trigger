@@ -86,14 +86,43 @@ describe("Pipeline", () => {
     expect(clipLengths).toEqual([1600 + 8000 + 4800]);
   });
 
-  it("reports too-long without transcribing", () => {
+  it("with matchAtEnd off, reports too-long without transcribing", () => {
+    pipeline = make(parseConfig({ matchAtEnd: false, triggers: [{ phrase: "computer listen", action: { run: "x" } }] }));
+    pipeline.feed(silence(3));
     say("computer listen", { start: 1000, length: 16000 * 3 + 1 });
-    expect(events[0].outcome).toBe("too-long");
-    expect(events[0].text).toBe("");
-    expect(events[0].nearest).toBeNull();
-    expect(events[0].trigger).toBeNull();
+    expect(events[0]).toMatchObject({ outcome: "too-long", text: "", nearest: null, trigger: null, atEnd: false });
     expect(clipLengths).toEqual([]);
     expect(fired).toEqual([]);
+  });
+
+  it("finds a phrase at the end of long speech, transcribing only the last maxPhraseSeconds", () => {
+    pipeline.feed(silence(8)); // 11 s held in total
+    say("computer listen");
+    ms = 5000;
+    say("so that is everything I wanted to say computer finish", { start: 16000, length: 16000 * 6 });
+    expect(events[1]).toMatchObject({ outcome: "fired", atEnd: true, trigger: config.triggers[1] });
+    expect(clipLengths[1]).toBe(16000 * 3 + 4800); // last 3 s plus the padding after
+    expect(fired).toEqual([config.triggers[0], config.triggers[1]]);
+  });
+
+  it("long speech that does not end with a phrase stays too-long", () => {
+    pipeline.feed(silence(8));
+    say("computer finish is what I say when I am done talking", { start: 16000, length: 16000 * 6 });
+    expect(events[0]).toMatchObject({ outcome: "too-long", atEnd: true, trigger: null });
+    expect(events[0].nearest).not.toBeNull();
+    expect(fired).toEqual([]);
+  });
+
+  it("matches an end phrase with small errors, and a three-word alias by its own length", () => {
+    const c = parseConfig({ triggers: [
+      { phrase: "computer finish", aliases: ["complete the finish"], action: { run: "x" } },
+    ] });
+    pipeline = make(c);
+    pipeline.feed(silence(11));
+    say("and then we are done computer finnish", { start: 16000, length: 16000 * 6 });
+    ms = 5000;
+    say("and then we are done complete the finish", { start: 16000, length: 16000 * 6 });
+    expect(events.map((e) => e.outcome)).toEqual(["fired", "fired"]);
   });
 
   it("reports no-match for other speech", () => {

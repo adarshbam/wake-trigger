@@ -5,6 +5,7 @@ export function formatClip(e: ClipEvent): string {
   let line = `${e.seconds.toFixed(1)}s  level ${e.level.toFixed(3)}  "${e.text}"`;
   if (e.nearest !== null) line += `  nearest "${e.nearest.phrase}" (${e.nearest.distance})`;
   line += `  -> ${e.outcome}`;
+  if (e.atEnd && e.outcome !== "too-long") line += " (at end of long speech)";
   if (e.level < 0.01) line += "  (input level is low; raise microphone volume)";
   return line;
 }
