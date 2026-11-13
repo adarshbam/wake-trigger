@@ -32,10 +32,12 @@ describe("formatIgnored", () => {
   });
 });
 
-describe("formatClip at end of long speech", () => {
-  it("marks a match found at the end, and leaves too-long plain", () => {
-    expect(formatClip({ ...base, seconds: 6.8, atEnd: true })).toContain("-> fired (at end of long speech)");
+describe("formatClip at end of speech", () => {
+  it("marks a match found at the end, and leaves a clip without a trigger plain", () => {
+    const trigger = { phrase: "computer listen", aliases: [], action: { run: "x" } };
+    expect(formatClip({ ...base, seconds: 6.8, atEnd: true, trigger })).toContain("-> fired (at end of speech)");
     expect(formatClip({ ...base, seconds: 6.8, atEnd: true, outcome: "too-long" })).toMatch(/-> too-long$/);
+    expect(formatClip({ ...base, atEnd: true, outcome: "no-match" })).toMatch(/-> no-match$/);
   });
 });
 

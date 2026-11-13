@@ -105,6 +105,38 @@ describe("Pipeline", () => {
     expect(fired).toEqual([config.triggers[0], config.triggers[1]]);
   });
 
+  it("a short clip that ends with the phrase fires: the phrase said twice in a hurry, or after a filler word", () => {
+    say("computer listen computer listen");
+    expect(events[0]).toMatchObject({ outcome: "fired", atEnd: true, trigger: config.triggers[0] });
+    ms = 5000;
+    say("okay computer finish");
+    expect(events[1]).toMatchObject({ outcome: "fired", atEnd: true, trigger: config.triggers[1] });
+    expect(fired).toEqual([config.triggers[0], config.triggers[1]]);
+  });
+
+  it("a short clip that only mentions the phrase does not fire", () => {
+    say("computer listen");
+    ms = 5000;
+    say("computer finish is not working");
+    expect(events[1]).toMatchObject({ outcome: "no-match", trigger: null });
+    ms = 7000;
+    say("say computer finish to stop");
+    expect(events[2].outcome).toBe("no-match");
+    expect(fired).toEqual([config.triggers[0]]);
+  });
+
+  it("a clip that is exactly the phrase is not marked as an end match", () => {
+    say("computer listen");
+    expect(events[0]).toMatchObject({ outcome: "fired", atEnd: false });
+  });
+
+  it("with matchAtEnd off, a short clip must be the whole phrase", () => {
+    pipeline = make(parseConfig({ matchAtEnd: false, triggers: [{ phrase: "computer listen", action: { run: "x" } }] }));
+    pipeline.feed(silence(3));
+    say("computer listen computer listen");
+    expect(events[0].outcome).toBe("no-match");
+  });
+
   it("long speech that does not end with a phrase stays too-long", () => {
     pipeline.feed(silence(8));
     say("computer finish is what I say when I am done talking", { start: 16000, length: 16000 * 6 });

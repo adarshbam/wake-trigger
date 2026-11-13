@@ -13,7 +13,7 @@ export interface ClipEvent {
   trigger: Trigger | null;
   /** True when a fire happened only because the phrase was repeated after being blocked by state. */
   forced: boolean;
-  /** True when the clip was longer than maxPhraseSeconds and only its end was transcribed and matched. */
+  /** True when the phrase was found as the last words of the clip, not as the whole clip. */
   atEnd: boolean;
 }
 export interface PipelineOptions {
@@ -95,26 +95,33 @@ export class Pipeline {
     const unpadded = this.slice(Math.min(this.total, Math.max(held, start)), Math.min(this.total, Math.max(held, start + length)));
     const level = rms(unpadded);
 
-    const atEnd = seconds > this.config.maxPhraseSeconds;
-    if (atEnd && !this.config.matchAtEnd) {
+    const long = seconds > this.config.maxPhraseSeconds;
+    if (long && !this.config.matchAtEnd) {
       this.opts.onClip({ text: "", seconds, level, nearest: null, outcome: "too-long", trigger: null, forced: false, atEnd: false });
       return;
     }
 
     // Long speech: a phrase said without a pause before it sits at the end of the clip.
     // Transcribe only the last maxPhraseSeconds and compare its last words with each phrase.
-    const from = atEnd ? start + length - Math.round(this.config.maxPhraseSeconds * SAMPLE_RATE) : start - PAD;
+    const from = long ? start + length - Math.round(this.config.maxPhraseSeconds * SAMPLE_RATE) : start - PAD;
     const clip = this.slice(
       Math.min(this.total, Math.max(held, from)),
       Math.min(this.total, Math.max(held, start + length + PAD)),
     );
     const text = this.transcriber.transcribe(clip);
-    const n = atEnd ? nearestAtEnd(normalize(text), this.candidates) : nearest(normalize(text), this.candidates);
+    // A short clip may be the phrase and nothing else, or may end with it: the phrase said twice in a hurry
+    // ("computer finish, computer finish") is one clip. Take whichever reading is closer.
+    const normalized = normalize(text);
+    const whole = long ? null : nearest(normalized, this.candidates);
+    const end = this.config.matchAtEnd ? nearestAtEnd(normalized, this.candidates) : null;
+    const useEnd = end !== null && (whole === null || end.distance < whole.distance);
+    const n = useEnd ? end : whole;
+    const atEnd = long || useEnd;
     const near = n === null ? null : { phrase: n.phrase, distance: n.distance };
     const report = (outcome: ClipEvent["outcome"], trigger: Trigger | null, forced = false) =>
       this.opts.onClip({ text, seconds, level, nearest: near, outcome, trigger, forced, atEnd });
 
-    if (n === null || !isMatch(n, this.config.tolerance)) return report(atEnd ? "too-long" : "no-match", null);
+    if (n === null || !isMatch(n, this.config.tolerance)) return report(long ? "too-long" : "no-match", null);
     const trigger = this.config.triggers[n.triggerIndex];
     const t = this.opts.now();
     if (this.lastFire !== null && t - this.lastFire < this.config.cooldownSeconds * 1000) return report("cooldown", trigger);

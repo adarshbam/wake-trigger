@@ -191,6 +191,8 @@ A fifth change: the stop phrase often needed many attempts. Cause, reproduced on
 
 A sixth change replaced guessing with knowing. Remembering what was sent kept going wrong: a second copy, a closed app, a keyboard stop, and finally the speaker repeating the phrase while the app was starting, which forced it off again. Handy cannot be asked for its state, but it logs every start and stop. Groups can now be watched: the tool follows the app's log file with two regular expressions and treats what it sent only as an expectation that lasts `confirmSeconds`. Repeats are then harmless in both directions, and a command that did not take effect is sent again on the next repeat.
 
+A seventh finding came from the dictation app's own saved recordings, replayed through the pipeline. During real dictation the small speech model heard the stop phrase correctly only about one time in five: "computer finish" came out as "competitive finish", "combido finish", "some bit of finish", "computer Swedish". The large model in the dictation app heard every one. Making the audio louder changed nothing. Two things follow. Aliases taken from a user's own recordings matter far more than first assumed, and a short clip that ends with the phrase (the phrase said twice in a hurry) now matches. The recogniser itself is the limit; a stronger model is the open item.
+
 ## Open questions (resolved)
 
 
