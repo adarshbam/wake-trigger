@@ -121,7 +121,7 @@ If the config is invalid, the program stops at start with a message that names t
 | `launchWaitSeconds` | number, 0 or more | `5` | After a program was started by `launch`, wait this long before sending it the action. |
 | `matchAtEnd` | `true` or `false` | `true` | Also accept a phrase as the last words of a clip, short or long. |
 | `sounds` | `true` or `false` | `false` | Play a short beep when a phrase is accepted: a high tone for a start or plain trigger, a lower tone for a `sets: "off"` trigger. Windows only. |
-| `logNearMisses` | `true` or `false` | `false` | In `start`, also log a clip that matched nothing but ended with almost the last word of a phrase. See "Near misses". |
+| `logNearMisses` | `true` or `false` | `false` | In `start`, also log a clip that matched nothing but ended with the last word of a phrase that could fire at that moment. See "Near misses". |
 | `groups` | object | `{}` | Groups whose state is read from the app's own log. See "Watched groups". |
 | `triggers` | array, not empty | none | The list of triggers. Required. |
 
@@ -296,11 +296,17 @@ What works, from testing:
 
 ### Near misses
 
-A phrase said deliberately in `test` is easier to recognise than the same phrase said at the end of real use. To collect what the model hears then, set `"logNearMisses": true`. `start` then logs a clip that matched nothing but ended with almost the last word of one of your phrases:
+A phrase said deliberately in `test` is easier to recognise than the same phrase said at the end of real use. To collect what the model hears then, set `"logNearMisses": true`. `start` then logs a clip that matched nothing but ended with the last word of one of your phrases:
 
 ```
 [12:00:01] near miss: heard "A bit of finish" (closest "computer finish", 7)
 ```
+
+The rule is narrow on purpose, so that ordinary speech is not logged:
+
+- Only phrases that could fire at that moment count. While a group is on, only its stop phrases; while it is off, only its start phrases.
+- A last word of six letters or more may be two letters off ("fininish"). A shorter word must be exact: "the real one" is not a near miss for "computer done".
+- From speech longer than `maxPhraseSeconds`, only the last three words are logged.
 
 If that was you saying "computer finish", add `"a bit of finish"` to that trigger's `aliases`. An alias with two or more distinctive words is safest; a very short alias such as "bit finish" would also match ordinary sentences that end the same way.
 
@@ -375,7 +381,7 @@ Limits: Windows only. If the microphone is not ready at sign-in, the program sto
 - Audio is processed in memory on your machine. No audio is written to disk.
 - No audio and no text leave your machine.
 - The only network use is `wake-trigger setup`, which downloads the models from the k2-fsa/sherpa-onnx GitHub releases.
-- The program logs the time and phrase of each trigger to the console, or to `~/.wake-trigger/wake-trigger.log` when it was started at sign-in. It stores nothing else. Speech that matches no phrase is not logged, with one exception you must turn on yourself: with `logNearMisses`, the text of a clip that ends with almost the last word of one of your phrases is logged.
+- The program logs the time and phrase of each trigger to the console, or to `~/.wake-trigger/wake-trigger.log` when it was started at sign-in. It stores nothing else. Speech that matches no phrase is not logged, with one exception you must turn on yourself: with `logNearMisses`, the text of a short clip that ends with the last word of a phrase that could fire at that moment is logged, and the last three words of longer speech that ends that way.
 
 ## Development
 

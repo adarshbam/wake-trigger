@@ -24,10 +24,15 @@ export function formatFired(d: Date, trigger: Trigger, forced: boolean): string 
   return `[${formatTime(d)}] fired "${trigger.phrase}"${forced ? " (forced by repeat)" : ""}`;
 }
 
-/** A clip that was probably a phrase, misheard. The heard text is what to add as an alias. */
+/**
+ * A clip that was probably a phrase, misheard. The heard text is what to add as an alias.
+ * From long speech only the last three words are shown: the rest is the speaker's own text, not a command.
+ */
 export function formatNearMiss(d: Date, e: ClipEvent): string {
   const closest = e.nearest === null ? "" : ` (closest "${e.nearest.phrase}", ${e.nearest.distance})`;
-  return `[${formatTime(d)}] near miss: heard "${e.text.trim()}"${closest}`;
+  const words = e.text.trim().split(/\s+/);
+  const heard = e.outcome === "too-long" && words.length > 3 ? `... ${words.slice(-3).join(" ")}` : words.join(" ");
+  return `[${formatTime(d)}] near miss: heard "${heard}"${closest}`;
 }
 
 export function formatLaunching(d: Date, trigger: Trigger): string {

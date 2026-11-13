@@ -137,21 +137,43 @@ describe("Pipeline", () => {
     expect(events[0].outcome).toBe("no-match");
   });
 
-  it("flags a near miss: no match, but the clip ends with almost the last word of a phrase", () => {
+  it("flags a near miss: no match, but the clip ends with the last word of a phrase that could fire now", () => {
     say("a bit of finish");
-    expect(events[0]).toMatchObject({ outcome: "no-match", nearMiss: true });
+    expect(events[0]).toMatchObject({ outcome: "no-match", nearMiss: false }); // nothing is on, so not a stop attempt
     ms = 2000;
-    say("and bettera fininish"); // fininish is two edits from finish
-    expect(events[1]).toMatchObject({ outcome: "no-match", nearMiss: true });
+    say("a bitter listen");
+    expect(events[1]).toMatchObject({ outcome: "no-match", nearMiss: true }); // could be the start phrase
     ms = 4000;
-    say("hello there");
-    expect(events[2]).toMatchObject({ outcome: "no-match", nearMiss: false });
-    ms = 6000;
     say("computer listen");
-    expect(events[3]).toMatchObject({ outcome: "fired", nearMiss: false });
+    expect(events[2]).toMatchObject({ outcome: "fired", nearMiss: false });
+    ms = 6000;
+    say("a bit of finish");
+    expect(events[3]).toMatchObject({ outcome: "no-match", nearMiss: true }); // dictation is on now
     ms = 8000;
+    say("and bettera fininish"); // fininish is two edits from finish
+    expect(events[4]).toMatchObject({ outcome: "no-match", nearMiss: true });
+    ms = 10000;
+    say("please listen");
+    expect(events[5]).toMatchObject({ outcome: "no-match", nearMiss: false }); // the start phrase cannot fire while on
+    ms = 12000;
+    say("hello there");
+    expect(events[6]).toMatchObject({ outcome: "no-match", nearMiss: false });
+    ms = 14000;
     say("so that is what I wanted to tell you before we finish", { start: 16000, length: 16000 * 3 + 1 });
-    expect(events[4]).toMatchObject({ outcome: "too-long", nearMiss: true });
+    expect(events[7]).toMatchObject({ outcome: "too-long", nearMiss: true });
+  });
+
+  it("a short phrase word must be exact for a near miss", () => {
+    pipeline = make(parseConfig({ triggers: [{ phrase: "computer done", aliases: ["computer stop"], action: { run: "x" } }] }));
+    pipeline.feed(silence(3));
+    say("the real one"); // one letter from done
+    expect(events[0]).toMatchObject({ outcome: "no-match", nearMiss: false });
+    ms = 2000;
+    say("at the top"); // one letter from stop
+    expect(events[1]).toMatchObject({ outcome: "no-match", nearMiss: false });
+    ms = 4000;
+    say("the bus stop");
+    expect(events[2]).toMatchObject({ outcome: "no-match", nearMiss: true });
   });
 
   it("long speech that does not end with a phrase stays too-long", () => {

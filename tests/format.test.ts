@@ -48,6 +48,12 @@ describe("near misses", () => {
     expect(formatNearMiss(d, e)).toBe('[03:04:05] near miss: heard "A bit of finish." (closest "computer finish", 7)');
     expect(formatNearMiss(d, { ...e, nearest: null })).toBe('[03:04:05] near miss: heard "A bit of finish."');
   });
+  it("formatNearMiss shows only the last three words of long speech", () => {
+    const d = new Date(2026, 0, 1, 3, 4, 5);
+    const e: ClipEvent = { ...base, text: "and that is everything I wanted to say a bit of finish", outcome: "too-long", nearMiss: true, nearest: null };
+    expect(formatNearMiss(d, e)).toBe('[03:04:05] near miss: heard "... bit of finish"');
+    expect(formatNearMiss(d, { ...e, text: "bit of finish" })).toBe('[03:04:05] near miss: heard "bit of finish"');
+  });
   it("formatClip marks a near miss", () => {
     expect(formatClip({ ...base, outcome: "no-match", nearMiss: true })).toContain("-> no-match  (near miss)");
   });

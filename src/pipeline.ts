@@ -16,8 +16,9 @@ export interface ClipEvent {
   /** True when the phrase was found as the last words of the clip, not as the whole clip. */
   atEnd: boolean;
   /**
-   * True when nothing matched but the clip ended with almost the last word of a phrase ("a bit of finish").
-   * Such a clip is probably the phrase, misheard: its text is worth adding as an alias.
+   * True when nothing matched but the clip ended with the last word of a phrase that could fire right now
+   * ("a bit of finish" while dictation is on). Such a clip is probably the phrase, misheard: its text is
+   * worth adding as an alias. A word of six letters or more may be two edits off; a shorter one must be exact.
    */
   nearMiss: boolean;
 }
@@ -42,7 +43,7 @@ const LAUNCH_ALLOWANCE_SECONDS = 6; // time for the launched process to appear, 
 
 export class Pipeline {
   private readonly candidates: Candidate[];
-  private readonly lastWords: string[];
+  private readonly lastWordOf: { triggerIndex: number; word: string }[];
   private readonly state: GroupState;
   // Backing store holds up to 2 * KEEP samples; the newest KEEP are the "held" audio.
   private readonly store = new Float32Array(2 * KEEP);
@@ -60,7 +61,9 @@ export class Pipeline {
     private readonly opts: PipelineOptions,
   ) {
     this.candidates = candidatesOf(config);
-    this.lastWords = [...new Set(this.candidates.map((c) => c.phrase.split(" ").at(-1) ?? ""))].filter((w) => w !== "");
+    this.lastWordOf = this.candidates
+      .map((c) => ({ triggerIndex: c.triggerIndex, word: c.phrase.split(" ").at(-1) ?? "" }))
+      .filter((x) => x.word !== "");
     this.state = new GroupState(config.maxOnSeconds, opts.now);
     for (const group of Object.keys(config.groups)) this.state.watch(group);
   }
@@ -125,9 +128,13 @@ export class Pipeline {
     const n = useEnd ? end : whole;
     const atEnd = long || useEnd;
     const near = n === null ? null : { phrase: n.phrase, distance: n.distance };
+    // A near miss has to look like an attempt at a phrase that could fire right now: while dictation is on,
+    // a sentence that ends in "listen" is not one. A short word must be exact, or ordinary speech would
+    // qualify all the time ("the real one" is not an attempt at "computer done").
     const lastWord = normalized.split(" ").at(-1) ?? "";
-    const endsLikeAPhrase = lastWord !== "" &&
-      this.lastWords.some((w) => editDistance(lastWord, w) <= (w.length >= 6 ? 2 : 1));
+    const endsLikeAPhrase = lastWord !== "" && this.lastWordOf.some(({ triggerIndex, word }) =>
+      (word.length >= 6 ? editDistance(lastWord, word) <= 2 : lastWord === word) &&
+      this.state.allows(this.config.triggers[triggerIndex]));
     const report = (outcome: ClipEvent["outcome"], trigger: Trigger | null, forced = false) =>
       this.opts.onClip({ text, seconds, level, nearest: near, outcome, trigger, forced, atEnd, nearMiss: trigger === null && endsLikeAPhrase });
 
