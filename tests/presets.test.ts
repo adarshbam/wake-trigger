@@ -9,6 +9,8 @@ describe("preset", () => {
     expect(c.triggers[0].action).toEqual({ run: "C:\\H\\handy.exe", args: ["--toggle-post-process"] });
     expect(c.triggers[0].aliases).toContain("computer listening");
     expect(c.triggers.map((t) => t.requires)).toEqual(["handy.exe", "handy.exe"]);
+    expect(c.triggers[0].launch).toEqual({ run: c.triggers[0].action && (c.triggers[0].action as { run: string }).run, args: ["--start-hidden"] });
+    expect(c.triggers[1].launch).toBeUndefined();
   });
 
   it("handy preset uses a placeholder path when none is given", () => {
@@ -24,7 +26,7 @@ describe("preset", () => {
 
   it("both presets set every top-level default explicitly", () => {
     for (const p of [preset("default"), preset("handy")]) {
-      expect(p).toMatchObject({ microphone: "default", model: "moonshine-base-en", tolerance: 2, maxPhraseSeconds: 3, cooldownSeconds: 1.5, maxOnSeconds: 300, forceRepeatSeconds: 10 });
+      expect(p).toMatchObject({ microphone: "default", model: "moonshine-base-en", tolerance: 2, maxPhraseSeconds: 3, cooldownSeconds: 1.5, maxOnSeconds: 300, forceRepeatSeconds: 10, launchWaitSeconds: 5 });
     }
   });
 });

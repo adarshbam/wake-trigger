@@ -8,6 +8,7 @@ const DEFAULTS = {
   cooldownSeconds: 1.5,
   maxOnSeconds: 300,
   forceRepeatSeconds: 10,
+  launchWaitSeconds: 5,
 };
 
 export function preset(name: "default" | "handy", handyPath?: string): unknown {
@@ -21,6 +22,7 @@ export function preset(name: "default" | "handy", handyPath?: string): unknown {
           group: "handy",
           sets: "on",
           requires: "handy.exe",
+          launch: { run: handyPath ?? PLACEHOLDER_HANDY_PATH, args: ["--start-hidden"] },
           action: { run: handyPath ?? PLACEHOLDER_HANDY_PATH, args: ["--toggle-post-process"] },
         },
         {

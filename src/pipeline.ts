@@ -9,7 +9,7 @@ import { GroupState } from "./state";
 export interface ClipEvent {
   text: string; seconds: number; level: number;
   nearest: { phrase: string; distance: number } | null;
-  outcome: "fired" | "no-match" | "too-long" | "cooldown" | "blocked-by-state" | "not-running";
+  outcome: "fired" | "no-match" | "too-long" | "cooldown" | "blocked-by-state" | "not-running" | "launching";
   trigger: Trigger | null;
   /** True when a fire happened only because the phrase was repeated after being blocked by state. */
   forced: boolean;
@@ -20,6 +20,11 @@ export interface PipelineOptions {
   onFire: (t: Trigger) => void;
   /** Is the named process running? Used for triggers with `requires`. Omitted: every process counts as running. */
   isRunning?: (name: string) => boolean;
+  /**
+   * Called instead of onFire when the trigger's required process is not running and the trigger has `launch`.
+   * The receiver starts the program and then runs the action. Omitted: such a trigger is skipped as not-running.
+   */
+  onLaunch?: (t: Trigger) => void;
 }
 
 const SAMPLE_RATE = 16000;
@@ -97,9 +102,9 @@ export class Pipeline {
     const trigger = this.config.triggers[n.triggerIndex];
     const t = this.opts.now();
     if (this.lastFire !== null && t - this.lastFire < this.config.cooldownSeconds * 1000) return report("cooldown", trigger);
-    if (trigger.requires !== undefined && this.opts.isRunning !== undefined && !this.opts.isRunning(trigger.requires)) {
-      return report("not-running", trigger);
-    }
+    const missing = trigger.requires !== undefined && this.opts.isRunning !== undefined &&
+      !this.opts.isRunning(trigger.requires);
+    if (missing && (trigger.launch === undefined || this.opts.onLaunch === undefined)) return report("not-running", trigger);
     let forced = false;
     if (!this.state.allows(trigger)) {
       // The tool only remembers what it sent; the app may have been stopped or started another way.
@@ -114,10 +119,11 @@ export class Pipeline {
     }
 
     this.lastBlocked = null;
-    this.opts.onFire(trigger);
+    if (missing) this.opts.onLaunch!(trigger);
+    else this.opts.onFire(trigger);
     this.state.apply(trigger);
     this.lastFire = this.opts.now();
-    report("fired", trigger, forced);
+    report(missing ? "launching" : "fired", trigger, forced);
   }
 }
 

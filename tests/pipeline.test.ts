@@ -21,6 +21,7 @@ let events: ClipEvent[];
 let fired: Trigger[];
 let pipeline: Pipeline;
 let runningNames: string[] | null;
+let launched: Trigger[];
 
 const segmenter: Segmenter = {
   accept() {
@@ -52,6 +53,7 @@ function make(c: typeof config): Pipeline {
     onClip: (e) => events.push(e),
     onFire: (t) => fired.push(t),
     isRunning: (name) => runningNames === null || runningNames.includes(name),
+    onLaunch: (t) => launched.push(t),
   });
 }
 
@@ -63,6 +65,7 @@ beforeEach(() => {
   events = [];
   fired = [];
   runningNames = null;
+  launched = [];
   pipeline = make(config);
   pipeline.feed(silence(3));
 });
@@ -231,5 +234,43 @@ describe("Pipeline", () => {
     ms = 2000;
     say("computer listen");
     expect(events[1].outcome).toBe("fired"); // state was not turned on by the skipped attempt
+  });
+
+  it("launches the required program instead of firing when the trigger has launch", () => {
+    const c = parseConfig({ triggers: [
+      { phrase: "computer listen", group: "handy", sets: "on", requires: "handy.exe", launch: { run: "handy.exe" }, action: { run: "x" } },
+      { phrase: "computer finish", group: "handy", sets: "off", requires: "handy.exe", action: { run: "x" } },
+    ] });
+    pipeline = make(c);
+    pipeline.feed(silence(3));
+    runningNames = [];
+    say("computer finish");
+    expect(events[0].outcome).toBe("not-running"); // the stop trigger has no launch
+    ms = 2000;
+    say("computer listen");
+    expect(events[1]).toMatchObject({ outcome: "launching", trigger: c.triggers[0] });
+    expect(launched).toEqual([c.triggers[0]]);
+    expect(fired).toEqual([]);
+    // the group is on now, so the start phrase is blocked and the stop phrase works once the program is up
+    ms = 4000;
+    say("computer listen");
+    expect(events[2].outcome).toBe("blocked-by-state");
+    runningNames = ["handy.exe"];
+    ms = 12000;
+    say("computer finish");
+    expect(events[3].outcome).toBe("fired");
+    expect(fired).toEqual([c.triggers[1]]);
+  });
+
+  it("fires normally when the program with launch is already running", () => {
+    const c = parseConfig({ triggers: [
+      { phrase: "computer listen", requires: "handy.exe", launch: { run: "handy.exe" }, action: { run: "x" } },
+    ] });
+    pipeline = make(c);
+    pipeline.feed(silence(3));
+    runningNames = ["handy.exe"];
+    say("computer listen");
+    expect(events[0].outcome).toBe("fired");
+    expect(launched).toEqual([]);
   });
 });

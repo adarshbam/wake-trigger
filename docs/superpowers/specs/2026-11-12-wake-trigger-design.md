@@ -185,6 +185,8 @@ Live use with Handy exposed three failures. Each has a fix in the tool.
 | "computer listen" only opened the Handy window | Handy was closed; a toggle sent to a closed app just launches it, and the tool's state went wrong | Triggers accept `requires` (a process name). The trigger is skipped, with a message, while that process is not running. The Handy preset sets `requires: "handy.exe"`. |
 | Stop phrase ignored with no way out | The tool's on/off memory was wrong and a state-blocked phrase was always ignored | Repeating a state-blocked phrase within `forceRepeatSeconds` (default 10) fires it anyway. This resolves the open question below: ignore the first time, fire on a deliberate repeat. |
 
+A fourth change followed. Skipping phrases while the app is closed was safe but left the user to open the app by hand, and the app had closed without notice. Triggers now accept `launch`: when the `requires` process is not running, the tool starts that program, waits for the process to appear, waits `launchWaitSeconds` (default 5), then sends the action. Measured with Handy: closed to recording in about 7 seconds.
+
 ## Open questions (resolved)
 
 

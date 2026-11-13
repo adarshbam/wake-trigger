@@ -116,6 +116,7 @@ If the config is invalid, the program stops at start with a message that names t
 | `cooldownSeconds` | number, 0 or more | `1.5` | After a trigger fires, any match within this time is ignored. |
 | `maxOnSeconds` | number, above 0 | `300` | A group that was turned on returns to off after this many seconds. |
 | `forceRepeatSeconds` | number, 0 or more | `10` | A phrase ignored because of group state fires anyway when it is said again within this time. `0` turns this off. |
+| `launchWaitSeconds` | number, 0 or more | `5` | After a program was started by `launch`, wait this long before sending it the action. |
 | `triggers` | array, not empty | none | The list of triggers. Required. |
 
 ### Trigger fields
@@ -127,7 +128,8 @@ If the config is invalid, the program stops at start with a message that names t
 | `action` | object | yes | What to do. See below. |
 | `group` | string | no | Name of a shared on/off state. Needs `sets`. |
 | `sets` | `"on"` or `"off"` | no | Whether this trigger turns its group on or off. Needs `group`. |
-| `requires` | string | no | Name of a process, for example `"handy.exe"`. The trigger is skipped while that process is not running. |
+| `requires` | string | no | Name of a process, for example `"handy.exe"`. The trigger is skipped while that process is not running, unless it has `launch`. |
+| `launch` | object with `run` and optional `args` | no | Program to start when the `requires` process is not running. Needs `requires`. |
 
 ### Actions
 
@@ -185,6 +187,31 @@ A toggle command sent to an app that is closed usually just opens the app, and t
 
 The process list is refreshed every 2 seconds. On Windows the name is the image name shown by `tasklist`.
 
+### `launch`
+
+Skipping is safe, but it means you must open the app yourself. Add `launch` and wake-trigger opens it for you:
+
+```json
+{
+  "phrase": "computer listen",
+  "requires": "handy.exe",
+  "launch": { "run": "C:/path/to/handy.exe", "args": ["--start-hidden"] },
+  "action": { "run": "C:/path/to/handy.exe", "args": ["--toggle-post-process"] }
+}
+```
+
+What happens when you say the phrase:
+
+1. The process named in `requires` is running: the action runs at once.
+2. It is not running: wake-trigger starts the `launch` program, waits until the process appears (up to 30 seconds), waits `launchWaitSeconds` more so the app is ready, then runs the action.
+
+```
+[12:00:01] starting handy.exe for "computer listen"
+[12:00:08] fired "computer listen"
+```
+
+So the first phrase after a restart takes a few seconds longer. A trigger without `launch` is still skipped while its program is closed.
+
 ## Handy preset
 
 Run:
@@ -200,7 +227,7 @@ The preset defines two phrases:
 - "computer listen" (alias "computer listening") turns the group `handy` on.
 - "computer finish" turns the group `handy` off.
 
-Both run `handy.exe --toggle-post-process`. This Handy flag toggles recording with post-processing. Handy's command line only toggles. It cannot tell wake-trigger whether it is recording. That is why the preset uses a group. Both triggers also set `requires: "handy.exe"`, so nothing is sent while Handy is closed. Start Handy first.
+Both run `handy.exe --toggle-post-process`. This Handy flag toggles recording with post-processing. Handy's command line only toggles. It cannot tell wake-trigger whether it is recording. That is why the preset uses a group. Both triggers also set `requires: "handy.exe"`. The start trigger has `launch`, so "computer listen" opens Handy hidden (`--start-hidden`) when it is closed, then starts dictation about 7 seconds later. The stop trigger is skipped while Handy is closed.
 
 While Handy records, it also hears you say "computer finish", so the phrase ends up in the text. Add this to Handy's post-processing prompt (Settings, Post Process) to remove it. List the phrases and aliases from your own config:
 
@@ -218,7 +245,7 @@ Run `wake-trigger test` and say your candidate phrases. For every clip it prints
 1.2s  level 0.045  "computer listen"  nearest "computer listen" (0)  -> fired
 ```
 
-The outcome is one of `fired`, `no-match`, `too-long`, `cooldown`, `blocked-by-state` or `not-running`. In `test` mode no action runs, so `fired` means "would fire".
+The outcome is one of `fired`, `no-match`, `too-long`, `cooldown`, `blocked-by-state`, `not-running` or `launching`. In `test` mode no action runs, so `fired` means "would fire".
 
 What works, from testing:
 
@@ -254,7 +281,7 @@ wake-trigger is not as accurate as the wake word on a phone. If a phrase is miss
 - `keys` works on Windows only and cannot press the Windows key.
 - The stop phrase stays in the text in raw dictation. The post-processing prompt line above removes it.
 - If you stop the app by keyboard, wake-trigger does not know. Its state stays wrong for up to `maxOnSeconds`. In that time the next start phrase is ignored once; say it again to force it.
-- Handy must already be running. The first recording right after Handy launches can misfire.
+- When Handy is closed, the first "computer listen" takes about 7 seconds, because Handy is started first.
 - Phrases are fixed triggers. There are no voice commands with parameters.
 - There is no graphical interface and no tray icon.
 - Unplugging the microphone while the program runs is untested. The program is written to stop with `Microphone error`, but this was not checked on hardware.

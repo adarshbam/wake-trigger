@@ -57,6 +57,17 @@ export class ProcessWatch {
     return this.running === null || this.running.has(name.toLowerCase());
   }
 
+  /** Refreshes until the process is running or the time is up. Resolves to whether it is running. */
+  async waitFor(name: string, timeoutMs: number, stepMs = 500): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      await this.refresh();
+      if (this.running !== null && this.running.has(name.toLowerCase())) return true;
+      if (this.running === null || Date.now() >= deadline) return this.running === null;
+      await new Promise((r) => setTimeout(r, stepMs));
+    }
+  }
+
   async refresh(): Promise<void> {
     try {
       this.running = new Set(await this.list());

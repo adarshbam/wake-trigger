@@ -3,13 +3,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import { ConfigError, configPath, homeDir, loadConfig } from "./config";
-import type { Config } from "./config";
+import type { Config, Trigger } from "./config";
 import { downloadModels, modelFiles, modelsPresent } from "./models";
 import { listDevices, openMic } from "./mic";
 import { Pipeline } from "./pipeline";
 import { runAction } from "./actions";
 import { preset } from "./presets";
-import { describeError, formatClip, formatFired, formatIgnored, formatNotRunning } from "./format";
+import { describeError, formatClip, formatFired, formatIgnored, formatLaunching, formatNotRunning } from "./format";
 import { acquireLock, lockOwner } from "./lock";
 import { autostartEnabled, disableAutostart, enableAutostart } from "./autostart";
 import { ProcessWatch } from "./processes";
@@ -104,7 +104,11 @@ async function listen(mode: "test" | "start"): Promise<void> {
   if (required.length > 0) {
     await watch.start();
     for (const name of required) {
-      if (!watch.isRunning(name)) console.log(`Note: ${name} is not running. Its phrases are skipped until it is started.`);
+      if (watch.isRunning(name)) continue;
+      const canLaunch = config.triggers.some((t) => t.requires === name && t.launch !== undefined);
+      console.log(canLaunch
+        ? `Note: ${name} is not running. It is started when you say a phrase that has "launch".`
+        : `Note: ${name} is not running. Its phrases are skipped until it is started.`);
     }
   }
   // Loaded lazily: the native library is slow to load and not needed by other commands.
@@ -117,11 +121,17 @@ async function listen(mode: "test" | "start"): Promise<void> {
       else if (e.trigger === null) return;
       else if (e.outcome === "fired") console.log(formatFired(new Date(), e.trigger, e.forced));
       else if (e.outcome === "not-running") console.log(formatNotRunning(new Date(), e.trigger));
+      else if (e.outcome === "launching") console.log(formatLaunching(new Date(), e.trigger));
       else if (e.outcome === "cooldown" || e.outcome === "blocked-by-state") {
         console.log(formatIgnored(new Date(), e.trigger, e.outcome));
       }
     },
     isRunning: (name) => watch.isRunning(name),
+    onLaunch: (trigger) => {
+      if (mode === "test") return;
+      launchThenRun(trigger, watch, config.launchWaitSeconds).catch((e) =>
+        console.error(`Starting ${trigger.requires} for "${trigger.phrase}" failed: ${describeError(e)}`));
+    },
     onFire: (trigger) => {
       if (mode === "test") return;
       runAction(trigger.action).catch((e) =>
@@ -196,6 +206,18 @@ ${USAGE}`);
   console.log(`Autostart enabled: ${file}`);
   console.log(`At each sign-in wake-trigger starts hidden and writes to ${logFile()}`);
   console.log("It is not started now. Start it with: wake-trigger start   Stop it with: wake-trigger stop");
+}
+
+/** The required program is closed: start it, wait until it is up and ready, then send the action. */
+async function launchThenRun(trigger: Trigger, watch: ProcessWatch, waitSeconds: number): Promise<void> {
+  if (trigger.launch === undefined || trigger.requires === undefined) return;
+  await runAction(trigger.launch);
+  if (!(await watch.waitFor(trigger.requires, 30_000))) {
+    throw new Error(`${trigger.requires} did not appear within 30 seconds`);
+  }
+  await new Promise((r) => setTimeout(r, waitSeconds * 1000));
+  await runAction(trigger.action);
+  console.log(formatFired(new Date(), trigger, false));
 }
 
 function noArguments(command: string, rest: string[]): void {

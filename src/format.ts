@@ -23,6 +23,10 @@ export function formatFired(d: Date, trigger: Trigger, forced: boolean): string 
   return `[${formatTime(d)}] fired "${trigger.phrase}"${forced ? " (forced by repeat)" : ""}`;
 }
 
+export function formatLaunching(d: Date, trigger: Trigger): string {
+  return `[${formatTime(d)}] starting ${trigger.requires} for "${trigger.phrase}"`;
+}
+
 export function formatNotRunning(d: Date, trigger: Trigger): string {
   return `[${formatTime(d)}] skipped "${trigger.phrase}" (${trigger.requires} is not running)`;
 }
