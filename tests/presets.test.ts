@@ -29,4 +29,15 @@ describe("preset", () => {
       expect(p).toMatchObject({ microphone: "default", model: "moonshine-base-en", tolerance: 2, maxPhraseSeconds: 3, cooldownSeconds: 1.5, maxOnSeconds: 300, forceRepeatSeconds: 10, launchWaitSeconds: 5 });
     }
   });
+
+  it("handy preset watches Handy's log when the local app data folder is known", () => {
+    const c = parseConfig(preset("handy", "C:/H/handy.exe", "C:/Users/u/AppData/Local"));
+    expect(Object.keys(c.groups)).toEqual(["handy"]);
+    expect(c.groups.handy.watchFile.split("\\").join("/")).toBe("C:/Users/u/AppData/Local/com.pais.handy/logs/handy.log");
+    expect(new RegExp(c.groups.handy.onPattern).test("[x][DEBUG] TranscribeAction::start called for binding: transcribe")).toBe(true);
+    for (const line of ["TranscribeAction::stop called for binding", "Initiating operation cancellation...", "recording stopped after 5.0 s"]) {
+      expect(new RegExp(c.groups.handy.offPattern).test(line)).toBe(true);
+    }
+    expect(parseConfig(preset("handy", "C:/H/handy.exe", "")).groups).toEqual({});
+  });
 });

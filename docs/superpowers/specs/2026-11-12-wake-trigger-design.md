@@ -189,6 +189,8 @@ A fourth change followed. Skipping phrases while the app is closed was safe but 
 
 A fifth change: the stop phrase often needed many attempts. Cause, reproduced on recorded audio: without a pause of about half a second before the phrase, the voice-activity detector joined it to the dictated sentence, the clip exceeded `maxPhraseSeconds`, and it was skipped. Long clips now have their last `maxPhraseSeconds` transcribed and their last words compared with the phrases (`matchAtEnd`, default on). On the same audio a 0.1 s pause now fires; normal long speech still does not.
 
+A sixth change replaced guessing with knowing. Remembering what was sent kept going wrong: a second copy, a closed app, a keyboard stop, and finally the speaker repeating the phrase while the app was starting, which forced it off again. Handy cannot be asked for its state, but it logs every start and stop. Groups can now be watched: the tool follows the app's log file with two regular expressions and treats what it sent only as an expectation that lasts `confirmSeconds`. Repeats are then harmless in both directions, and a command that did not take effect is sent again on the next repeat.
+
 ## Open questions (resolved)
 
 

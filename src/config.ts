@@ -14,6 +14,18 @@ export interface Trigger {
   launch?: { run: string; args?: string[] };
   action: Action;
 }
+/** A group whose on/off state is read from the app's own log file instead of being guessed. */
+export interface GroupWatch {
+  /** Log file the app appends to. */
+  watchFile: string;
+  /** Regular expression: a new log line matching it means the app turned on. */
+  onPattern: string;
+  /** Regular expression: a new log line matching it means the app turned off. */
+  offPattern: string;
+  /** How long to trust a command just sent before falling back to what the log last said. */
+  confirmSeconds: number;
+}
+
 export interface Config {
   microphone: string;
   model: "moonshine-base-en" | "moonshine-tiny-en";
@@ -29,6 +41,7 @@ export interface Config {
   matchAtEnd: boolean;
   /** Play a short sound when a phrase is accepted, so the speaker knows it was heard. */
   sounds: boolean;
+  groups: Record<string, GroupWatch>;
   triggers: Trigger[];
 }
 
@@ -122,9 +135,41 @@ function parseTrigger(v: unknown, i: number): Trigger {
   return trigger;
 }
 
+function parseGroups(v: unknown): Record<string, GroupWatch> {
+  if (v === undefined) return {};
+  if (!isObject(v)) throw new ConfigError("groups must be an object");
+  const out: Record<string, GroupWatch> = {};
+  for (const [name, g] of Object.entries(v)) {
+    const f = `groups.${name}`;
+    if (!isObject(g)) throw new ConfigError(`${f} must be an object`);
+    rejectUnknown(g, ["watchFile", "onPattern", "offPattern", "confirmSeconds"], `${f}.`);
+    const watch: GroupWatch = {
+      watchFile: nonEmptyString(g.watchFile, `${f}.watchFile`),
+      onPattern: nonEmptyString(g.onPattern, `${f}.onPattern`),
+      offPattern: nonEmptyString(g.offPattern, `${f}.offPattern`),
+      confirmSeconds: 3,
+    };
+    for (const key of ["onPattern", "offPattern"] as const) {
+      try {
+        new RegExp(watch[key]);
+      } catch (e) {
+        throw new ConfigError(`${f}.${key} is not a valid regular expression: ${(e as Error).message}`);
+      }
+    }
+    if (g.confirmSeconds !== undefined) {
+      if (typeof g.confirmSeconds !== "number" || !Number.isFinite(g.confirmSeconds) || g.confirmSeconds <= 0) {
+        throw new ConfigError(`${f}.confirmSeconds must be a finite number > 0`);
+      }
+      watch.confirmSeconds = g.confirmSeconds;
+    }
+    out[name] = watch;
+  }
+  return out;
+}
+
 export function parseConfig(raw: unknown): Config {
   if (!isObject(raw)) throw new ConfigError("config must be a JSON object");
-  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "forceRepeatSeconds", "launchWaitSeconds", "matchAtEnd", "sounds", "triggers"], "");
+  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "forceRepeatSeconds", "launchWaitSeconds", "matchAtEnd", "sounds", "groups", "triggers"], "");
   const microphone = raw.microphone === undefined ? "default" : nonEmptyString(raw.microphone, "microphone");
   const model = raw.model === undefined ? "moonshine-base-en" : raw.model;
   if (model !== "moonshine-base-en" && model !== "moonshine-tiny-en") {
@@ -144,7 +189,11 @@ export function parseConfig(raw: unknown): Config {
     throw new ConfigError("triggers must be a non-empty array");
   }
   const triggers = raw.triggers.map(parseTrigger);
-  const config: Config = { microphone, model, tolerance, maxPhraseSeconds, cooldownSeconds, maxOnSeconds, forceRepeatSeconds, launchWaitSeconds, matchAtEnd, sounds, triggers };
+  const groups = parseGroups(raw.groups);
+  for (const name of Object.keys(groups)) {
+    if (!triggers.some((t) => t.group === name)) throw new ConfigError(`groups.${name}: no trigger uses the group "${name}"`);
+  }
+  const config: Config = { microphone, model, tolerance, maxPhraseSeconds, cooldownSeconds, maxOnSeconds, forceRepeatSeconds, launchWaitSeconds, matchAtEnd, sounds, groups, triggers };
 
   const cands = candidatesOf(config);
   for (let a = 0; a < cands.length; a++) {

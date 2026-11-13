@@ -121,6 +121,7 @@ If the config is invalid, the program stops at start with a message that names t
 | `launchWaitSeconds` | number, 0 or more | `5` | After a program was started by `launch`, wait this long before sending it the action. |
 | `matchAtEnd` | `true` or `false` | `true` | Also look for a phrase at the end of speech longer than `maxPhraseSeconds`. |
 | `sounds` | `true` or `false` | `false` | Play a short beep when a phrase is accepted: a high tone for a start or plain trigger, a lower tone for a `sets: "off"` trigger. Windows only. |
+| `groups` | object | `{}` | Groups whose state is read from the app's own log. See "Watched groups". |
 | `triggers` | array, not empty | none | The list of triggers. Required. |
 
 ### Trigger fields
@@ -181,6 +182,37 @@ Say the same phrase again within `forceRepeatSeconds` and it fires anyway. Repea
 [12:00:05] fired "computer finish" (forced by repeat)
 ```
 
+### Watched groups
+
+A plain group guesses: it remembers what wake-trigger sent. A watched group knows: it reads the app's own log file and follows what the app reports.
+
+```json
+"groups": {
+  "handy": {
+    "watchFile": "C:/Users/you/AppData/Local/com.pais.handy/logs/handy.log",
+    "onPattern": "TranscribeAction::start called",
+    "offPattern": "TranscribeAction::stop called|Initiating operation cancellation|recording stopped after"
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `watchFile` | Log file the app appends to. |
+| `onPattern` | Regular expression. A new line that matches means the app turned on. |
+| `offPattern` | Regular expression. A new line that matches means the app turned off. |
+| `confirmSeconds` | Default `3`. After sending a command, how long to wait for the log to confirm it. |
+
+What this changes for a group named here:
+
+- Saying the start phrase many times starts once. While the app is on, every repeat is ignored. Repeats can never switch it off.
+- Saying the stop phrase many times stops once.
+- If the app did not react within `confirmSeconds`, the next repeat sends the command again. So when it did not start, saying it again helps.
+- Starting or stopping the app with its own hotkey keeps wake-trigger in step.
+- `forceRepeatSeconds` and `maxOnSeconds` do not apply to a watched group. They are for plain groups.
+
+`start` logs each change it sees: `[12:00:02] handy is on`.
+
 ### `requires`
 
 A toggle command sent to an app that is closed usually just opens the app, and the state goes wrong. Give the trigger `"requires": "handy.exe"` and it is skipped while that program is not running:
@@ -231,7 +263,7 @@ The preset defines two phrases:
 - "computer listen" (alias "computer listening") turns the group `handy` on.
 - "computer finish" turns the group `handy` off.
 
-Both run `handy.exe --toggle-post-process`. This Handy flag toggles recording with post-processing. Handy's command line only toggles. It cannot tell wake-trigger whether it is recording. That is why the preset uses a group. Both triggers also set `requires: "handy.exe"`. The start trigger has `launch`, so "computer listen" opens Handy hidden (`--start-hidden`) when it is closed, then starts dictation about 7 seconds later. The stop trigger is skipped while Handy is closed.
+Both run `handy.exe --toggle-post-process`. This Handy flag toggles recording with post-processing. Handy's command line only toggles. It cannot tell wake-trigger whether it is recording. That is why the preset uses a group, and why the group is watched: `init --preset handy` points `groups.handy` at Handy's log file, where Handy writes a line for every start and stop. Handy must log at level Debug for the start line to appear (`"log_level": "debug"` in Handy's settings). Both triggers also set `requires: "handy.exe"`. The start trigger has `launch`, so "computer listen" opens Handy hidden (`--start-hidden`) when it is closed, then starts dictation about 7 seconds later. The stop trigger is skipped while Handy is closed.
 
 While Handy records, it also hears you say "computer finish", so the phrase ends up in the text. Add this to Handy's post-processing prompt (Settings, Post Process) to remove it. List the phrases and aliases from your own config:
 
@@ -284,7 +316,8 @@ wake-trigger is not as accurate as the wake word on a phone. If a phrase is miss
 - Only Windows 11 is tested. macOS and Linux are untested.
 - `keys` works on Windows only and cannot press the Windows key.
 - The stop phrase stays in the text in raw dictation. The post-processing prompt line above removes it.
-- If you stop the app by keyboard, wake-trigger does not know. Its state stays wrong for up to `maxOnSeconds`. In that time the next start phrase is ignored once; say it again to force it.
+- With a plain group, if you stop the app by keyboard, wake-trigger does not know. Its state stays wrong for up to `maxOnSeconds`; say the phrase again to force it. A watched group does not have this problem.
+- A watched group depends on the wording of the app's log lines. If an app update changes them, update the patterns.
 - When Handy is closed, the first "computer listen" takes about 7 seconds, because Handy is started first.
 - Phrases are fixed triggers. There are no voice commands with parameters.
 - There is no graphical interface and no tray icon.

@@ -1,3 +1,5 @@
+import * as path from "node:path";
+
 const PLACEHOLDER_HANDY_PATH = "C:\\path\\to\\handy.exe";
 
 const DEFAULTS = {
@@ -13,10 +15,23 @@ const DEFAULTS = {
   sounds: false,
 };
 
-export function preset(name: "default" | "handy", handyPath?: string): unknown {
+/** Lines Handy writes to its log (at log level Debug) when dictation starts and ends. */
+export const HANDY_ON_PATTERN = "TranscribeAction::start called";
+export const HANDY_OFF_PATTERN = "TranscribeAction::stop called|Initiating operation cancellation|recording stopped after";
+
+export function preset(
+  name: "default" | "handy",
+  handyPath?: string,
+  localAppData: string | undefined = process.env.LOCALAPPDATA,
+): unknown {
   if (name === "handy") {
+    // Handy cannot be asked whether it is recording, but it logs every start and stop.
+    const groups = localAppData
+      ? { handy: { watchFile: path.join(localAppData, "com.pais.handy", "logs", "handy.log"), onPattern: HANDY_ON_PATTERN, offPattern: HANDY_OFF_PATTERN } }
+      : {};
     return {
       ...DEFAULTS,
+      groups,
       triggers: [
         {
           phrase: "computer listen",

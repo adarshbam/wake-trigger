@@ -45,6 +45,7 @@ export class Pipeline {
   private lastFire: number | null = null;
   private lastBlocked: { triggerIndex: number; at: number } | null = null;
   private noForceUntil = 0;
+  private readonly launchingUntil = new Map<string, number>();
 
   constructor(
     private readonly config: Config,
@@ -54,6 +55,12 @@ export class Pipeline {
   ) {
     this.candidates = candidatesOf(config);
     this.state = new GroupState(config.maxOnSeconds, opts.now);
+    for (const group of Object.keys(config.groups)) this.state.watch(group);
+  }
+
+  /** The app behind a watched group reported that it turned on or off. */
+  observe(group: string, on: boolean): void {
+    this.state.observe(group, on);
   }
 
   feed(samples: Float32Array): void {
@@ -113,9 +120,16 @@ export class Pipeline {
     if (this.lastFire !== null && t - this.lastFire < this.config.cooldownSeconds * 1000) return report("cooldown", trigger);
     const missing = trigger.requires !== undefined && this.opts.isRunning !== undefined &&
       !this.opts.isRunning(trigger.requires);
+    // A closed app has nothing on. Not while we are starting it, though: then it is expected to be missing.
+    if (missing && trigger.group !== undefined && t >= (this.launchingUntil.get(trigger.group) ?? 0)) {
+      this.state.reset(trigger.group);
+    }
     if (missing && (trigger.launch === undefined || this.opts.onLaunch === undefined)) return report("not-running", trigger);
+    const watched = trigger.group !== undefined && this.state.isObserved(trigger.group);
     let forced = false;
     if (!this.state.allows(trigger)) {
+      // A watched group knows the app's real state, so a repeat is never needed to correct it and never forces.
+      if (watched) return report("blocked-by-state", trigger);
       // The tool only remembers what it sent; the app may have been stopped or started another way.
       // Saying the same phrase again soon after it was ignored overrides that memory.
       // Not right after a fire, though: a speaker who repeats the phrase because the app is slow to react
@@ -133,8 +147,11 @@ export class Pipeline {
     this.lastBlocked = null;
     if (missing) this.opts.onLaunch!(trigger);
     else this.opts.onFire(trigger);
-    this.state.apply(trigger);
+    const launchMs = missing ? (this.config.launchWaitSeconds + LAUNCH_ALLOWANCE_SECONDS) * 1000 : 0;
+    const confirmMs = watched ? this.config.groups[trigger.group!].confirmSeconds * 1000 + launchMs : 0;
+    this.state.apply(trigger, confirmMs);
     this.lastFire = this.opts.now();
+    if (missing && trigger.group !== undefined) this.launchingUntil.set(trigger.group, this.lastFire + launchMs);
     // Settling time: the app needs a moment to react, longer when it has to be started first.
     this.noForceUntil = this.lastFire + (SETTLE_SECONDS + (missing ? this.config.launchWaitSeconds + LAUNCH_ALLOWANCE_SECONDS : 0)) * 1000;
     report(missing ? "launching" : "fired", trigger, forced);

@@ -9,10 +9,11 @@ import { listDevices, openMic } from "./mic";
 import { Pipeline } from "./pipeline";
 import { playSound, runAction } from "./actions";
 import { preset } from "./presets";
-import { describeError, formatClip, formatFired, formatIgnored, formatLaunching, formatNotRunning } from "./format";
+import { describeError, formatClip, formatFired, formatIgnored, formatLaunching, formatNotRunning, formatTime } from "./format";
 import { acquireLock, lockOwner } from "./lock";
 import { autostartEnabled, disableAutostart, enableAutostart } from "./autostart";
 import { ProcessWatch } from "./processes";
+import { LogWatch } from "./logwatch";
 
 const USAGE = `Usage: wake-trigger <command>
 
@@ -140,6 +141,24 @@ async function listen(mode: "test" | "start"): Promise<void> {
         console.error(`Action for "${trigger.phrase}" failed: ${e instanceof Error ? e.message : String(e)}`));
     },
   });
+
+  // Watched groups: follow the app's own log, so the on/off state is the real one.
+  for (const [group, g] of Object.entries(config.groups)) {
+    const on = new RegExp(g.onPattern);
+    const off = new RegExp(g.offPattern);
+    let live = false; // lines read at startup only set the state; they are not announced
+    const logWatch = new LogWatch(g.watchFile, (line) => {
+      const turnedOn = on.test(line);
+      if (!turnedOn && !off.test(line)) return;
+      pipeline.observe(group, turnedOn);
+      if (live && mode === "start") console.log(`[${formatTime(new Date())}] ${group} is ${turnedOn ? "on" : "off"}`);
+    });
+    logWatch.start();
+    live = true;
+    // The log may end with "on" from a run that was killed. A closed app has nothing on.
+    const needed = config.triggers.filter((t) => t.group === group && t.requires !== undefined).map((t) => t.requires!);
+    if (needed.some((name) => !watch.isRunning(name))) pipeline.observe(group, false);
+  }
 
   const phrases = config.triggers.map((t) => `"${t.phrase}"`).join(", ");
   const mic = openMic(
