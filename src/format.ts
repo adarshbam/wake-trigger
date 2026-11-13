@@ -6,6 +6,7 @@ export function formatClip(e: ClipEvent): string {
   if (e.nearest !== null) line += `  nearest "${e.nearest.phrase}" (${e.nearest.distance})`;
   line += `  -> ${e.outcome}`;
   if (e.atEnd && e.trigger !== null) line += " (at end of speech)";
+  if (e.nearMiss) line += "  (near miss)";
   if (e.level < 0.01) line += "  (input level is low; raise microphone volume)";
   return line;
 }
@@ -21,6 +22,12 @@ export function formatIgnored(d: Date, trigger: Trigger, reason: "cooldown" | "b
 
 export function formatFired(d: Date, trigger: Trigger, forced: boolean): string {
   return `[${formatTime(d)}] fired "${trigger.phrase}"${forced ? " (forced by repeat)" : ""}`;
+}
+
+/** A clip that was probably a phrase, misheard. The heard text is what to add as an alias. */
+export function formatNearMiss(d: Date, e: ClipEvent): string {
+  const closest = e.nearest === null ? "" : ` (closest "${e.nearest.phrase}", ${e.nearest.distance})`;
+  return `[${formatTime(d)}] near miss: heard "${e.text.trim()}"${closest}`;
 }
 
 export function formatLaunching(d: Date, trigger: Trigger): string {

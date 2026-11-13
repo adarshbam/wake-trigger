@@ -28,7 +28,7 @@ export interface GroupWatch {
 
 export interface Config {
   microphone: string;
-  model: "moonshine-base-en" | "moonshine-tiny-en";
+  model: ModelId;
   tolerance: number;
   maxPhraseSeconds: number;
   cooldownSeconds: number;
@@ -41,9 +41,15 @@ export interface Config {
   matchAtEnd: boolean;
   /** Play a short sound when a phrase is accepted, so the speaker knows it was heard. */
   sounds: boolean;
+  /** In `start`, also log a clip that did not match but ended with almost the last word of a phrase. */
+  logNearMisses: boolean;
   groups: Record<string, GroupWatch>;
   triggers: Trigger[];
 }
+
+/** Speech models the tool can download and run. The first one is the default. */
+export const MODEL_IDS = ["parakeet-110m-en", "moonshine-base-en", "moonshine-tiny-en"] as const;
+export type ModelId = (typeof MODEL_IDS)[number];
 
 export class ConfigError extends Error {}
 
@@ -169,11 +175,11 @@ function parseGroups(v: unknown): Record<string, GroupWatch> {
 
 export function parseConfig(raw: unknown): Config {
   if (!isObject(raw)) throw new ConfigError("config must be a JSON object");
-  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "forceRepeatSeconds", "launchWaitSeconds", "matchAtEnd", "sounds", "groups", "triggers"], "");
+  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "forceRepeatSeconds", "launchWaitSeconds", "matchAtEnd", "sounds", "logNearMisses", "groups", "triggers"], "");
   const microphone = raw.microphone === undefined ? "default" : nonEmptyString(raw.microphone, "microphone");
-  const model = raw.model === undefined ? "moonshine-base-en" : raw.model;
-  if (model !== "moonshine-base-en" && model !== "moonshine-tiny-en") {
-    throw new ConfigError(`model must be "moonshine-base-en" or "moonshine-tiny-en"`);
+  const model = raw.model === undefined ? MODEL_IDS[0] : raw.model;
+  if (typeof model !== "string" || !(MODEL_IDS as readonly string[]).includes(model)) {
+    throw new ConfigError(`model must be one of: ${MODEL_IDS.map((m) => `"${m}"`).join(", ")}`);
   }
   const tolerance = number(raw, "tolerance", 2, false);
   const maxPhraseSeconds = number(raw, "maxPhraseSeconds", 3, true);
@@ -185,6 +191,8 @@ export function parseConfig(raw: unknown): Config {
   const matchAtEnd = raw.matchAtEnd === undefined ? true : raw.matchAtEnd;
   if (raw.sounds !== undefined && typeof raw.sounds !== "boolean") throw new ConfigError("sounds must be true or false");
   const sounds = raw.sounds === undefined ? false : raw.sounds;
+  if (raw.logNearMisses !== undefined && typeof raw.logNearMisses !== "boolean") throw new ConfigError("logNearMisses must be true or false");
+  const logNearMisses = raw.logNearMisses === undefined ? false : raw.logNearMisses;
   if (!Array.isArray(raw.triggers) || raw.triggers.length === 0) {
     throw new ConfigError("triggers must be a non-empty array");
   }
@@ -193,7 +201,7 @@ export function parseConfig(raw: unknown): Config {
   for (const name of Object.keys(groups)) {
     if (!triggers.some((t) => t.group === name)) throw new ConfigError(`groups.${name}: no trigger uses the group "${name}"`);
   }
-  const config: Config = { microphone, model, tolerance, maxPhraseSeconds, cooldownSeconds, maxOnSeconds, forceRepeatSeconds, launchWaitSeconds, matchAtEnd, sounds, groups, triggers };
+  const config: Config = { microphone, model: model as ModelId, tolerance, maxPhraseSeconds, cooldownSeconds, maxOnSeconds, forceRepeatSeconds, launchWaitSeconds, matchAtEnd, sounds, logNearMisses, groups, triggers };
 
   const cands = candidatesOf(config);
   for (let a = 0; a < cands.length; a++) {

@@ -26,7 +26,7 @@ describe("preset", () => {
 
   it("both presets set every top-level default explicitly", () => {
     for (const p of [preset("default"), preset("handy")]) {
-      expect(p).toMatchObject({ microphone: "default", model: "moonshine-base-en", tolerance: 2, maxPhraseSeconds: 3, cooldownSeconds: 1.5, maxOnSeconds: 300, forceRepeatSeconds: 10, launchWaitSeconds: 5 });
+      expect(p).toMatchObject({ microphone: "default", model: "parakeet-110m-en", tolerance: 2, maxPhraseSeconds: 3, cooldownSeconds: 1.5, maxOnSeconds: 300, forceRepeatSeconds: 10, launchWaitSeconds: 5 });
     }
   });
 

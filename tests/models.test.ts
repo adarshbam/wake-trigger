@@ -162,3 +162,39 @@ describe("downloadModels", () => {
     expect(events.some((e) => e[0] === "silero_vad.onnx")).toBe(true);
   });
 });
+
+describe("parakeet-110m-en", () => {
+  it("has one model file and tokens, in its own folder", () => {
+    const f = modelFiles("parakeet-110m-en", root);
+    expect(f).toEqual({
+      kind: "nemoCtc",
+      vad: path.join(root, "silero_vad.onnx"),
+      model: path.join(root, "parakeet-110m-en", "model.int8.onnx"),
+      tokens: path.join(root, "parakeet-110m-en", "tokens.txt"),
+    });
+    expect(modelFiles("moonshine-base-en", root).kind).toBe("moonshine");
+  });
+
+  it("is present only when the voice-activity model and both of its files exist", () => {
+    const f = modelFiles("parakeet-110m-en", root);
+    if (f.kind !== "nemoCtc") throw new Error("unexpected kind");
+    fs.mkdirSync(path.dirname(f.model), { recursive: true });
+    fs.writeFileSync(f.vad, "");
+    fs.writeFileSync(f.model, "");
+    expect(modelsPresent("parakeet-110m-en", root)).toBe(false);
+    fs.writeFileSync(f.tokens, "");
+    expect(modelsPresent("parakeet-110m-en", root)).toBe(true);
+    expect(modelsPresent("moonshine-base-en", root)).toBe(false);
+  });
+
+  it("downloads its own archive and names its files when the archive is wrong", async () => {
+    const calls: string[] = [];
+    // The test archive holds Moonshine file names, so it is the wrong layout for this model.
+    await expect(downloadModels("parakeet-110m-en", () => {}, root, okFetch(calls))).rejects.toThrow(
+      "archive did not contain model.int8.onnx / tokens.txt");
+    expect(calls.at(-1)).toBe(
+      "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8.tar.bz2");
+    expect(fs.existsSync(path.join(root, "parakeet-110m-en"))).toBe(false);
+    expect(leftovers()).toEqual([]);
+  });
+});

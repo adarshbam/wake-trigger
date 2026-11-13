@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { formatClip, describeError, formatFired, formatIgnored, formatNotRunning, formatTime } from "../src/format";
+import { formatClip, describeError, formatFired, formatIgnored, formatNearMiss, formatNotRunning, formatTime } from "../src/format";
 import type { ClipEvent } from "../src/pipeline";
 
-const base: ClipEvent = { text: "computer listen", seconds: 1.234, level: 0.0456, nearest: { phrase: "computer listen", distance: 0 }, outcome: "fired", trigger: null, forced: false, atEnd: false };
+const base: ClipEvent = { text: "computer listen", seconds: 1.234, level: 0.0456, nearest: { phrase: "computer listen", distance: 0 }, outcome: "fired", trigger: null, forced: false, atEnd: false, nearMiss: false };
 
 describe("formatClip", () => {
   it("formats a full line", () => {
@@ -38,6 +38,18 @@ describe("formatClip at end of speech", () => {
     expect(formatClip({ ...base, seconds: 6.8, atEnd: true, trigger })).toContain("-> fired (at end of speech)");
     expect(formatClip({ ...base, seconds: 6.8, atEnd: true, outcome: "too-long" })).toMatch(/-> too-long$/);
     expect(formatClip({ ...base, atEnd: true, outcome: "no-match" })).toMatch(/-> no-match$/);
+  });
+});
+
+describe("near misses", () => {
+  it("formatNearMiss shows the heard text and the closest phrase", () => {
+    const d = new Date(2026, 0, 1, 3, 4, 5);
+    const e: ClipEvent = { ...base, text: " A bit of finish. ", outcome: "no-match", nearMiss: true, nearest: { phrase: "computer finish", distance: 7 } };
+    expect(formatNearMiss(d, e)).toBe('[03:04:05] near miss: heard "A bit of finish." (closest "computer finish", 7)');
+    expect(formatNearMiss(d, { ...e, nearest: null })).toBe('[03:04:05] near miss: heard "A bit of finish."');
+  });
+  it("formatClip marks a near miss", () => {
+    expect(formatClip({ ...base, outcome: "no-match", nearMiss: true })).toContain("-> no-match  (near miss)");
   });
 });
 

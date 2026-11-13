@@ -2,7 +2,7 @@ import { candidatesOf } from "./config";
 import type { Config, Trigger } from "./config";
 import { isMatch, nearest } from "./matcher";
 import type { Candidate, Nearest } from "./matcher";
-import { normalize } from "./normalize";
+import { editDistance, normalize } from "./normalize";
 import type { Segmenter, Transcriber } from "./recognizer";
 import { GroupState } from "./state";
 
@@ -15,6 +15,11 @@ export interface ClipEvent {
   forced: boolean;
   /** True when the phrase was found as the last words of the clip, not as the whole clip. */
   atEnd: boolean;
+  /**
+   * True when nothing matched but the clip ended with almost the last word of a phrase ("a bit of finish").
+   * Such a clip is probably the phrase, misheard: its text is worth adding as an alias.
+   */
+  nearMiss: boolean;
 }
 export interface PipelineOptions {
   now: () => number;
@@ -37,6 +42,7 @@ const LAUNCH_ALLOWANCE_SECONDS = 6; // time for the launched process to appear, 
 
 export class Pipeline {
   private readonly candidates: Candidate[];
+  private readonly lastWords: string[];
   private readonly state: GroupState;
   // Backing store holds up to 2 * KEEP samples; the newest KEEP are the "held" audio.
   private readonly store = new Float32Array(2 * KEEP);
@@ -54,6 +60,7 @@ export class Pipeline {
     private readonly opts: PipelineOptions,
   ) {
     this.candidates = candidatesOf(config);
+    this.lastWords = [...new Set(this.candidates.map((c) => c.phrase.split(" ").at(-1) ?? ""))].filter((w) => w !== "");
     this.state = new GroupState(config.maxOnSeconds, opts.now);
     for (const group of Object.keys(config.groups)) this.state.watch(group);
   }
@@ -97,7 +104,7 @@ export class Pipeline {
 
     const long = seconds > this.config.maxPhraseSeconds;
     if (long && !this.config.matchAtEnd) {
-      this.opts.onClip({ text: "", seconds, level, nearest: null, outcome: "too-long", trigger: null, forced: false, atEnd: false });
+      this.opts.onClip({ text: "", seconds, level, nearest: null, outcome: "too-long", trigger: null, forced: false, atEnd: false, nearMiss: false });
       return;
     }
 
@@ -118,8 +125,11 @@ export class Pipeline {
     const n = useEnd ? end : whole;
     const atEnd = long || useEnd;
     const near = n === null ? null : { phrase: n.phrase, distance: n.distance };
+    const lastWord = normalized.split(" ").at(-1) ?? "";
+    const endsLikeAPhrase = lastWord !== "" &&
+      this.lastWords.some((w) => editDistance(lastWord, w) <= (w.length >= 6 ? 2 : 1));
     const report = (outcome: ClipEvent["outcome"], trigger: Trigger | null, forced = false) =>
-      this.opts.onClip({ text, seconds, level, nearest: near, outcome, trigger, forced, atEnd });
+      this.opts.onClip({ text, seconds, level, nearest: near, outcome, trigger, forced, atEnd, nearMiss: trigger === null && endsLikeAPhrase });
 
     if (n === null || !isMatch(n, this.config.tolerance)) return report(long ? "too-long" : "no-match", null);
     const trigger = this.config.triggers[n.triggerIndex];

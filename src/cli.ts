@@ -2,14 +2,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { ConfigError, configPath, homeDir, loadConfig } from "./config";
+import { ConfigError, MODEL_IDS, configPath, homeDir, loadConfig } from "./config";
 import type { Config, Trigger } from "./config";
 import { downloadModels, modelFiles, modelsPresent } from "./models";
 import { listDevices, openMic } from "./mic";
 import { Pipeline } from "./pipeline";
 import { playSound, runAction } from "./actions";
 import { preset } from "./presets";
-import { describeError, formatClip, formatFired, formatIgnored, formatLaunching, formatNotRunning, formatTime } from "./format";
+import { describeError, formatClip, formatFired, formatIgnored, formatLaunching, formatNearMiss, formatNotRunning, formatTime } from "./format";
 import { acquireLock, lockOwner } from "./lock";
 import { autostartEnabled, disableAutostart, enableAutostart } from "./autostart";
 import { ProcessWatch } from "./processes";
@@ -53,7 +53,7 @@ function init(args: string[]): void {
 }
 
 async function setup(): Promise<void> {
-  let model: Config["model"] = "moonshine-base-en";
+  let model: Config["model"] = MODEL_IDS[0];
   if (fs.existsSync(configPath())) {
     try {
       model = loadConfig().model;
@@ -119,7 +119,9 @@ async function listen(mode: "test" | "start"): Promise<void> {
     now: Date.now,
     onClip: (e) => {
       if (mode === "test") console.log(formatClip(e));
-      else if (e.trigger === null) return;
+      else if (e.trigger === null) {
+        if (config.logNearMisses && e.nearMiss) console.log(formatNearMiss(new Date(), e));
+      }
       else if (e.outcome === "fired") console.log(formatFired(new Date(), e.trigger, e.forced));
       else if (e.outcome === "not-running") console.log(formatNotRunning(new Date(), e.trigger));
       else if (e.outcome === "launching") console.log(formatLaunching(new Date(), e.trigger));

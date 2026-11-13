@@ -6,13 +6,36 @@ import { pipeline } from "node:stream/promises";
 import { homeDir } from "./config";
 import type { Config } from "./config";
 
-export interface ModelFiles { vad: string; encoder: string; mergedDecoder: string; tokens: string }
+/** Where a model's files are on disk. The shape depends on the kind of model. */
+export type ModelFiles =
+  | { kind: "nemoCtc"; vad: string; model: string; tokens: string }
+  | { kind: "moonshine"; vad: string; encoder: string; mergedDecoder: string; tokens: string };
+
+interface ModelSpec {
+  kind: ModelFiles["kind"];
+  /** Archive name in the sherpa-onnx "asr-models" release. It holds one top folder with `files` in it. */
+  archive: string;
+  files: string[];
+}
 
 const BASE_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/";
 const VAD_FILE = "silero_vad.onnx";
-const ARCHIVES: Record<Config["model"], string> = {
-  "moonshine-base-en": "sherpa-onnx-moonshine-base-en-quantized-2026-02-27.tar.bz2",
-  "moonshine-tiny-en": "sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27.tar.bz2",
+const MODELS: Record<Config["model"], ModelSpec> = {
+  "parakeet-110m-en": {
+    kind: "nemoCtc",
+    archive: "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8.tar.bz2",
+    files: ["model.int8.onnx", "tokens.txt"],
+  },
+  "moonshine-base-en": {
+    kind: "moonshine",
+    archive: "sherpa-onnx-moonshine-base-en-quantized-2026-02-27.tar.bz2",
+    files: ["encoder_model.ort", "decoder_model_merged.ort", "tokens.txt"],
+  },
+  "moonshine-tiny-en": {
+    kind: "moonshine",
+    archive: "sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27.tar.bz2",
+    files: ["encoder_model.ort", "decoder_model_merged.ort", "tokens.txt"],
+  },
 };
 
 function defaultRoot(): string {
@@ -21,16 +44,25 @@ function defaultRoot(): string {
 
 export function modelFiles(model: Config["model"], root: string = defaultRoot()): ModelFiles {
   const dir = path.join(root, model);
+  const vad = path.join(root, VAD_FILE);
+  const tokens = path.join(dir, "tokens.txt");
+  if (MODELS[model].kind === "nemoCtc") return { kind: "nemoCtc", vad, model: path.join(dir, "model.int8.onnx"), tokens };
   return {
-    vad: path.join(root, VAD_FILE),
+    kind: "moonshine",
+    vad,
     encoder: path.join(dir, "encoder_model.ort"),
     mergedDecoder: path.join(dir, "decoder_model_merged.ort"),
-    tokens: path.join(dir, "tokens.txt"),
+    tokens,
   };
 }
 
+/** The speech model's own files, without the shared voice-activity model. */
+function speechModelPaths(model: Config["model"], root: string): string[] {
+  return MODELS[model].files.map((name) => path.join(root, model, name));
+}
+
 export function modelsPresent(model: Config["model"], root: string = defaultRoot()): boolean {
-  return Object.values(modelFiles(model, root)).every((p) => fs.existsSync(p));
+  return [path.join(root, VAD_FILE), ...speechModelPaths(model, root)].every((p) => fs.existsSync(p));
 }
 
 type Progress = (file: string, done: number, total: number) => void;
@@ -86,29 +118,28 @@ export async function downloadModels(
   fetchFn: typeof fetch = fetch,
 ): Promise<void> {
   fs.mkdirSync(root, { recursive: true });
-  const files = modelFiles(model, root);
-
-  if (!fs.existsSync(files.vad)) {
-    await downloadTo(BASE_URL + VAD_FILE, files.vad, VAD_FILE, onProgress, fetchFn);
+  const vad = path.join(root, VAD_FILE);
+  if (!fs.existsSync(vad)) {
+    await downloadTo(BASE_URL + VAD_FILE, vad, VAD_FILE, onProgress, fetchFn);
   }
 
-  const modelPresent = [files.encoder, files.mergedDecoder, files.tokens].every((p) => fs.existsSync(p));
-  if (modelPresent) return;
+  const wanted = speechModelPaths(model, root);
+  if (wanted.every((p) => fs.existsSync(p))) return;
 
+  const spec = MODELS[model];
   const finalDir = path.join(root, model);
   const tmpDir = finalDir + ".tmp";
-  const archiveName = ARCHIVES[model];
-  const archive = path.join(root, archiveName);
+  const archive = path.join(root, spec.archive);
   try {
-    await downloadTo(BASE_URL + archiveName, archive, archiveName, onProgress, fetchFn);
+    await downloadTo(BASE_URL + spec.archive, archive, spec.archive, onProgress, fetchFn);
     fs.rmSync(tmpDir, { recursive: true, force: true });
     fs.mkdirSync(tmpDir);
     await extract(archive, tmpDir, root);
     fs.rmSync(finalDir, { recursive: true, force: true });
     fs.renameSync(tmpDir, finalDir);
-    if (![files.encoder, files.mergedDecoder, files.tokens].every((p) => fs.existsSync(p))) {
+    if (!wanted.every((p) => fs.existsSync(p))) {
       fs.rmSync(finalDir, { recursive: true, force: true });
-      throw new Error("archive did not contain encoder_model.ort / decoder_model_merged.ort / tokens.txt");
+      throw new Error(`archive did not contain ${spec.files.join(" / ")}`);
     }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

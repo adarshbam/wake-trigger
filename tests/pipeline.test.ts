@@ -137,6 +137,23 @@ describe("Pipeline", () => {
     expect(events[0].outcome).toBe("no-match");
   });
 
+  it("flags a near miss: no match, but the clip ends with almost the last word of a phrase", () => {
+    say("a bit of finish");
+    expect(events[0]).toMatchObject({ outcome: "no-match", nearMiss: true });
+    ms = 2000;
+    say("and bettera fininish"); // fininish is two edits from finish
+    expect(events[1]).toMatchObject({ outcome: "no-match", nearMiss: true });
+    ms = 4000;
+    say("hello there");
+    expect(events[2]).toMatchObject({ outcome: "no-match", nearMiss: false });
+    ms = 6000;
+    say("computer listen");
+    expect(events[3]).toMatchObject({ outcome: "fired", nearMiss: false });
+    ms = 8000;
+    say("so that is what I wanted to tell you before we finish", { start: 16000, length: 16000 * 3 + 1 });
+    expect(events[4]).toMatchObject({ outcome: "too-long", nearMiss: true });
+  });
+
   it("long speech that does not end with a phrase stays too-long", () => {
     pipeline.feed(silence(8));
     say("computer finish is what I say when I am done talking", { start: 16000, length: 16000 * 6 });

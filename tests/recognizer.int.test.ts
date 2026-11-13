@@ -55,3 +55,18 @@ describe.skipIf(!modelsPresent("moonshine-base-en") || !existsSync(fixture))("re
     });
   }, 60_000);
 });
+
+describe.skipIf(!modelsPresent("parakeet-110m-en") || !existsSync(fixture))("recogniser (parakeet-110m-en)", () => {
+  it("transcribes the clips of real speech", () => {
+    const files = modelFiles("parakeet-110m-en");
+    const raw = readFileSync(fixture);
+    const audio = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
+    const segmenter = createSegmenter(files);
+    const segments = [];
+    for (let i = 0; i < audio.length; i += 512) segments.push(...segmenter.accept(audio.subarray(i, Math.min(i + 512, audio.length))));
+    const transcriber = createTranscriber(files);
+    const texts = segments.map((s) => normalize(transcriber.transcribe(
+      audio.slice(Math.max(0, s.start - PAD), Math.min(audio.length, s.start + s.length + PAD)))));
+    expect(texts.filter((t) => t === "computer listen").length).toBeGreaterThanOrEqual(3);
+  }, 60_000);
+});

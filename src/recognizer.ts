@@ -76,10 +76,13 @@ export function createSegmenter(files: ModelFiles, rebaseAfterSamples: number = 
 }
 
 export function createTranscriber(files: ModelFiles): Transcriber {
+  const model = files.kind === "nemoCtc"
+    ? { nemoCtc: { model: files.model } }
+    : { moonshine: { encoder: files.encoder, mergedDecoder: files.mergedDecoder } };
   const asr = new sherpa.OfflineRecognizer({
     featConfig: { sampleRate: SAMPLE_RATE, featureDim: 80 },
     modelConfig: {
-      moonshine: { encoder: files.encoder, mergedDecoder: files.mergedDecoder },
+      ...model,
       tokens: files.tokens,
       numThreads: 2,
       provider: "cpu",

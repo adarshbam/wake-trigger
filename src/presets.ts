@@ -4,7 +4,7 @@ const PLACEHOLDER_HANDY_PATH = "C:\\path\\to\\handy.exe";
 
 const DEFAULTS = {
   microphone: "default",
-  model: "moonshine-base-en",
+  model: "parakeet-110m-en",
   tolerance: 2,
   maxPhraseSeconds: 3,
   cooldownSeconds: 1.5,
@@ -13,6 +13,7 @@ const DEFAULTS = {
   launchWaitSeconds: 5,
   matchAtEnd: true,
   sounds: false,
+  logNearMisses: false,
 };
 
 /** Lines Handy writes to its log (at log level Debug) when dictation starts and ends. */

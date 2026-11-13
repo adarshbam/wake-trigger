@@ -193,6 +193,8 @@ A sixth change replaced guessing with knowing. Remembering what was sent kept go
 
 A seventh finding came from the dictation app's own saved recordings, replayed through the pipeline. During real dictation the small speech model heard the stop phrase correctly only about one time in five: "computer finish" came out as "competitive finish", "combido finish", "some bit of finish", "computer Swedish". The large model in the dictation app heard every one. Making the audio louder changed nothing. Two things follow. Aliases taken from a user's own recordings matter far more than first assumed, and a short clip that ends with the phrase (the phrase said twice in a hurry) now matches. The recogniser itself is the limit; a stronger model is the open item.
 
+An eighth change followed from that finding. A second speech model, NVIDIA Parakeet TDT-CTC 110M (same size, same speed), was compared with Moonshine base on the same recordings through the real pipeline, with only the plain phrases configured. Slow, deliberate phrases: 14 fired for each. Twenty-two stop attempts at the end of four real dictations: 8 fired against 3, and the first attempt was caught in 2 of 4 dictations against 0 of 4. Parakeet is now the default and Moonshine stays selectable. Parakeet still mishears this speaker ("a bit of finish"), so `start` can log near misses, clips that matched nothing but ended with almost the last word of a phrase, to show which aliases to add.
+
 ## Open questions (resolved)
 
 

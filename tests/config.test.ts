@@ -9,7 +9,7 @@ const t = (phrase: string, extra = {}) => ({ phrase, action: { run: "x" }, ...ex
 describe("parseConfig", () => {
   it("applies defaults and normalises candidates", () => {
     const c = parseConfig({ triggers: [t("Computer, Listen!")] });
-    expect(c).toMatchObject({ microphone: "default", model: "moonshine-base-en", tolerance: 2,
+    expect(c).toMatchObject({ microphone: "default", model: "parakeet-110m-en", tolerance: 2,
       maxPhraseSeconds: 3, cooldownSeconds: 1.5, maxOnSeconds: 300 });
     expect(c.triggers[0].aliases).toEqual([]);
     expect(candidatesOf(c)).toEqual([{ triggerIndex: 0, phrase: "computer listen" }]);
@@ -151,5 +151,24 @@ describe("forceRepeatSeconds and requires", () => {
     expect(parseConfig({ triggers: [t()] }).triggers[0].requires).toBeUndefined();
     expect(() => parseConfig({ triggers: [t({ requires: "" })] })).toThrow(/triggers\[0\]\.requires/);
     expect(() => parseConfig({ triggers: [t({ requires: 5 })] })).toThrow(/triggers\[0\]\.requires/);
+  });
+});
+
+describe("model", () => {
+  const t = { phrase: "a b", action: { run: "x" } };
+  it("defaults to parakeet-110m-en and accepts each known model", () => {
+    expect(parseConfig({ triggers: [t] }).model).toBe("parakeet-110m-en");
+    for (const model of ["parakeet-110m-en", "moonshine-base-en", "moonshine-tiny-en"]) {
+      expect(parseConfig({ model, triggers: [t] }).model).toBe(model);
+    }
+  });
+  it("names the choices when the model is unknown or not a string", () => {
+    expect(() => parseConfig({ model: "whisper", triggers: [t] })).toThrow(/model must be one of: "parakeet-110m-en", "moonshine-base-en", "moonshine-tiny-en"/);
+    expect(() => parseConfig({ model: 5, triggers: [t] })).toThrow(/model must be one of/);
+  });
+  it("logNearMisses defaults to false and must be a boolean", () => {
+    expect(parseConfig({ triggers: [t] }).logNearMisses).toBe(false);
+    expect(parseConfig({ logNearMisses: true, triggers: [t] }).logNearMisses).toBe(true);
+    expect(() => parseConfig({ logNearMisses: "yes", triggers: [t] })).toThrow(/logNearMisses/);
   });
 });

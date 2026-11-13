@@ -41,7 +41,7 @@ The package is not on npm yet, so you install from source.
 Then:
 
 1. `wake-trigger init` writes a starter config to `~/.wake-trigger/config.json`. The default config opens Notepad on "computer listen" and "computer finish". Use `wake-trigger init --preset handy` for the Handy preset.
-2. `wake-trigger setup` downloads the speech models (about 110 MB).
+2. `wake-trigger setup` downloads the speech models (about 100 MB).
 3. `wake-trigger test` shows what the program hears. It runs no actions.
 4. `wake-trigger start` listens and runs actions. Press Ctrl+C to stop.
 
@@ -50,7 +50,7 @@ Then:
 - Node.js 20 or newer.
 - Windows 10 or 11. Tested on Windows 11 only.
 - A microphone.
-- About 110 MB of disk space for the models.
+- About 135 MB of disk space for the models.
 - The `tar` command, which is built into Windows 10 and later. `setup` uses it to unpack the models.
 
 macOS and Linux are untested. The code does not block them, but `keys` actions work on Windows only.
@@ -86,7 +86,7 @@ microphone (16 kHz mono)
   -> cooldown
 ```
 
-A voice-activity detector (Silero VAD) cuts the audio into one clip per utterance. A small speech model (Moonshine) turns each short clip into text. The text is compared with your phrases.
+A voice-activity detector (Silero VAD) cuts the audio into one clip per utterance. A small speech model (Parakeet TDT-CTC 110M by default) turns each short clip into text. The text is compared with your phrases.
 
 A short clip is transcribed whole. It matches when it is the phrase and nothing else, or when its last words are the phrase: "okay, computer finish", or the phrase said twice in a hurry. A clip that only mentions the phrase in the middle ("computer finish is not working") does not match. This is what keeps false triggers rare.
 
@@ -98,7 +98,7 @@ Two config checks run at start. A phrase must contain at least one letter. Two t
 
 wake-trigger uses these libraries:
 
-- `sherpa-onnx-node`, from the k2-fsa/sherpa-onnx project. It runs the Silero VAD and Moonshine models.
+- `sherpa-onnx-node`, from the k2-fsa/sherpa-onnx project. It runs the Silero VAD and the speech model: NVIDIA Parakeet TDT-CTC 110M (CC-BY-4.0), or Moonshine.
 - `@picovoice/pvrecorder-node` for microphone capture. It is Apache-2.0 and needs no access key.
 
 ## Config reference
@@ -112,7 +112,7 @@ If the config is invalid, the program stops at start with a message that names t
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `microphone` | string | `"default"` | `"default"` or a device name from `wake-trigger devices`. An exact name wins. Otherwise a case-insensitive part of the name matches. |
-| `model` | string | `"moonshine-base-en"` | `"moonshine-base-en"` (106 MB, more accurate) or `"moonshine-tiny-en"` (27 MB, less consistent). |
+| `model` | string | `"parakeet-110m-en"` | `"parakeet-110m-en"` (100 MB download, best in testing), `"moonshine-base-en"` (106 MB) or `"moonshine-tiny-en"` (27 MB, less consistent). See "Measured accuracy". |
 | `tolerance` | number, 0 or more | `2` | Largest number of character edits between the heard text and a phrase that still counts as a match. |
 | `maxPhraseSeconds` | number, above 0 | `3` | Clips longer than this are skipped. |
 | `cooldownSeconds` | number, 0 or more | `1.5` | After a trigger fires, any match within this time is ignored. |
@@ -121,6 +121,7 @@ If the config is invalid, the program stops at start with a message that names t
 | `launchWaitSeconds` | number, 0 or more | `5` | After a program was started by `launch`, wait this long before sending it the action. |
 | `matchAtEnd` | `true` or `false` | `true` | Also accept a phrase as the last words of a clip, short or long. |
 | `sounds` | `true` or `false` | `false` | Play a short beep when a phrase is accepted: a high tone for a start or plain trigger, a lower tone for a `sets: "off"` trigger. Windows only. |
+| `logNearMisses` | `true` or `false` | `false` | In `start`, also log a clip that matched nothing but ended with almost the last word of a phrase. See "Near misses". |
 | `groups` | object | `{}` | Groups whose state is read from the app's own log. See "Watched groups". |
 | `triggers` | array, not empty | none | The list of triggers. Required. |
 
@@ -289,26 +290,51 @@ What works, from testing:
 - Avoid very short, one-word phrases. They are easy to trigger by accident and easy to mishear.
 - Use common words. Rare words are heard as common ones. "Handy" was misheard.
 - Add aliases for sound-alikes. If the program hears "right" for "write", add the heard spelling to `aliases`.
-- Add aliases for what `test` hears from you. A speech model mishears each voice in its own way. The author's config lists "come to listen" and "combator finish", because that is what the model printed for some attempts. Ten aliases per phrase is normal.
+- Add aliases for what the model hears from you. A speech model mishears each voice in its own way. The author's config lists "a bit of finish" and "capiter stop", because that is what the model printed for some attempts. Ten or more aliases per phrase is normal.
 - Raise the microphone volume if `test` prints `(input level is low; raise microphone volume)`. A quiet microphone lowers every score.
 - Pause after the phrase. The clip ends when you stop talking for about half a second. A pause before the phrase is not needed.
+
+### Near misses
+
+A phrase said deliberately in `test` is easier to recognise than the same phrase said at the end of real use. To collect what the model hears then, set `"logNearMisses": true`. `start` then logs a clip that matched nothing but ended with almost the last word of one of your phrases:
+
+```
+[12:00:01] near miss: heard "A bit of finish" (closest "computer finish", 7)
+```
+
+If that was you saying "computer finish", add `"a bit of finish"` to that trigger's `aliases`. An alias with two or more distinctive words is safest; a very short alias such as "bit finish" would also match ordinary sentences that end the same way.
 
 ## Measured accuracy
 
 These are the results of one speaker, the author, on one laptop microphone. They are small samples and not a benchmark. Your results will differ.
 
+### Choosing the method
+
 | Method | Phrase | Result |
 |---|---|---|
 | sherpa-onnx keyword spotter | "hey handy" | 0 of 5 |
 | sherpa-onnx keyword spotter | "stop handy" | 2 of 5 |
-| Voice-activity detector, Moonshine base, text match (the method used) | "computer listen" | 5 of 5 |
-| Voice-activity detector, Moonshine base, text match (the method used) | "computer finish" | 4 of 5 |
+| Voice-activity detector, speech model, text match (the method used) | "computer listen" | 5 of 5 |
+| Voice-activity detector, speech model, text match (the method used) | "computer finish" | 4 of 5 |
 
-The keyword spotter did not improve in a sweep of 54 settings. The best it reached was 1 of 5 and 2 of 5. It was dropped.
+The keyword spotter did not improve in a sweep of 54 settings. The best it reached was 1 of 5 and 2 of 5. It was dropped. With the chosen method there were no false triggers in normal talk. Adding 0.3 s of audio before and after each clip raised accuracy a lot.
 
-With the chosen method there were no false triggers in normal talk. The tiny Moonshine model (27 MB) gave inconsistent results between runs, so the base model is the default. Adding 0.3 s of audio before and after each clip raised accuracy a lot. The base model takes about 100 ms per clip on a laptop CPU.
+### Choosing the speech model
 
-wake-trigger is not as accurate as the wake word on a phone. If a phrase is missed, say it again.
+Both models below were run on the same recorded audio, through the real pipeline, with only the plain phrases configured (no aliases taken from mishearings).
+
+| Audio | Moonshine base | Parakeet 110M |
+|---|---|---|
+| Phrase test: phrases said slowly, one at a time | 14 fired | 14 fired |
+| Four real dictations: 22 stop attempts, said at the end of a memo | 3 fired | 8 fired |
+| Dictations where the first stop attempt was caught | 0 of 4 | 2 of 4 |
+| Time per clip on a laptop CPU | about 85 ms | about 90 ms |
+
+Said slowly, both models hear the phrases equally well. At the end of real dictation the phrase comes out faster and quieter, and Moonshine heard "computer finish" as "competitive finish", "combido finish", "some bit of finish". Parakeet did better and is the default. Making the audio louder before recognition changed nothing for either model.
+
+Neither model is enough on its own for this speaker: Parakeet still heard "a bit of finish" and "capiter stop". With those near misses added as aliases, the first stop attempt was caught in 4 of 4 dictations. That last number is measured on the same recordings the aliases came from, so expect less on new speech.
+
+wake-trigger is not as accurate as the wake word on a phone. Use `logNearMisses`, add the aliases it shows you, and it gets better for your voice.
 
 ## Limits
 
@@ -349,7 +375,7 @@ Limits: Windows only. If the microphone is not ready at sign-in, the program sto
 - Audio is processed in memory on your machine. No audio is written to disk.
 - No audio and no text leave your machine.
 - The only network use is `wake-trigger setup`, which downloads the models from the k2-fsa/sherpa-onnx GitHub releases.
-- The program logs the time and phrase of each trigger to the console, or to `~/.wake-trigger/wake-trigger.log` when it was started at sign-in. It stores nothing else. Speech that matches no phrase is not logged.
+- The program logs the time and phrase of each trigger to the console, or to `~/.wake-trigger/wake-trigger.log` when it was started at sign-in. It stores nothing else. Speech that matches no phrase is not logged, with one exception you must turn on yourself: with `logNearMisses`, the text of a clip that ends with almost the last word of one of your phrases is logged.
 
 ## Development
 
@@ -381,7 +407,7 @@ The design document, with the approaches that were tried and rejected and the me
 
 - Tray icon with on/off state.
 - macOS and Linux testing; `keys` actions outside Windows.
-- Other languages (the Moonshine models used here are English only).
+- Other languages (the models used here are English only).
 - A published npm package.
 - An opt-in way to save missed clips, to tune aliases faster.
 
@@ -390,7 +416,8 @@ Issues and pull requests are welcome.
 ## Acknowledgements
 
 - [Handy](https://github.com/cjpais/Handy), the dictation app this was built around.
-- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), Silero VAD and Moonshine, for local speech recognition.
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) and Silero VAD, for running speech recognition locally.
+- [NVIDIA Parakeet TDT-CTC 110M](https://huggingface.co/nvidia/parakeet-tdt_ctc-110m) (CC-BY-4.0) and [Moonshine](https://github.com/moonshine-ai/moonshine), the speech models.
 - [pvrecorder](https://github.com/Picovoice/pvrecorder) for microphone capture.
 
 ## Licence
