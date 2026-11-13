@@ -32,6 +32,8 @@ export interface PipelineOptions {
 const SAMPLE_RATE = 16000;
 const KEEP = 15 * SAMPLE_RATE;
 const PAD = 4800;
+const SETTLE_SECONDS = 6;
+const LAUNCH_ALLOWANCE_SECONDS = 6; // time for the launched process to appear, on top of launchWaitSeconds
 
 export class Pipeline {
   private readonly candidates: Candidate[];
@@ -42,6 +44,7 @@ export class Pipeline {
   private total = 0; // absolute count of samples fed so far
   private lastFire: number | null = null;
   private lastBlocked: { triggerIndex: number; at: number } | null = null;
+  private noForceUntil = 0;
 
   constructor(
     private readonly config: Config,
@@ -115,6 +118,9 @@ export class Pipeline {
     if (!this.state.allows(trigger)) {
       // The tool only remembers what it sent; the app may have been stopped or started another way.
       // Saying the same phrase again soon after it was ignored overrides that memory.
+      // Not right after a fire, though: a speaker who repeats the phrase because the app is slow to react
+      // would undo the start. Repeats in that settling time are ignored and do not count toward a force.
+      if (t < this.noForceUntil) return report("blocked-by-state", trigger);
       const b = this.lastBlocked;
       forced = b !== null && b.triggerIndex === n.triggerIndex && this.config.forceRepeatSeconds > 0 &&
         t - b.at <= this.config.forceRepeatSeconds * 1000;
@@ -129,6 +135,8 @@ export class Pipeline {
     else this.opts.onFire(trigger);
     this.state.apply(trigger);
     this.lastFire = this.opts.now();
+    // Settling time: the app needs a moment to react, longer when it has to be started first.
+    this.noForceUntil = this.lastFire + (SETTLE_SECONDS + (missing ? this.config.launchWaitSeconds + LAUNCH_ALLOWANCE_SECONDS : 0)) * 1000;
     report(missing ? "launching" : "fired", trigger, forced);
   }
 }

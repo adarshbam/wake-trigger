@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { EventEmitter } from "node:events";
-import { toSendKeys, runAction, type Spawn } from "../src/actions";
+import { playSound, toSendKeys, runAction, type Spawn } from "../src/actions";
 
 type Call = { cmd: string; args: string[]; opts: Record<string, unknown> };
 
@@ -82,5 +82,30 @@ describe("runAction", () => {
   it("rejects (not throws) on an invalid key combination", async () => {
     const { fake } = makeFake(exits(0));
     await expect(runAction({ keys: "win+r" }, fake, "win32")).rejects.toThrow(/win/);
+  });
+});
+
+describe("playSound", () => {
+  function recorder() {
+    const calls: { cmd: string; args: string[] }[] = [];
+    const fn = ((cmd: string, args: string[]) => {
+      calls.push({ cmd, args });
+      return { on() { return this; }, unref() {} };
+    }) as unknown as Spawn;
+    return { calls, fn };
+  }
+  it("beeps through powershell on Windows, higher for accepted than for stopped", () => {
+    const r = recorder();
+    playSound("accepted", r.fn, "win32");
+    playSound("stopped", r.fn, "win32");
+    expect(r.calls.map((c) => c.cmd)).toEqual(["powershell", "powershell"]);
+    expect(r.calls[0].args.at(-1)).toBe("[console]::beep(880,120)");
+    expect(r.calls[1].args.at(-1)).toBe("[console]::beep(520,120)");
+  });
+  it("does nothing on other platforms and never throws", () => {
+    const r = recorder();
+    playSound("accepted", r.fn, "linux");
+    expect(r.calls).toEqual([]);
+    expect(() => playSound("accepted", (() => { throw new Error("no powershell"); }) as unknown as Spawn, "win32")).not.toThrow();
   });
 });

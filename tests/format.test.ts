@@ -27,7 +27,7 @@ describe("formatIgnored", () => {
   it("names the phrase and the reason", () => {
     const trigger = { phrase: "computer listen", aliases: [], action: { run: "x" } };
     const d = new Date(2026, 0, 1, 3, 4, 5);
-    expect(formatIgnored(d, trigger, "blocked-by-state")).toBe('[03:04:05] ignored "computer listen" (blocked-by-state; say it again to force)');
+    expect(formatIgnored(d, trigger, "blocked-by-state")).toBe('[03:04:05] ignored "computer listen" (blocked-by-state)');
     expect(formatIgnored(d, trigger, "cooldown")).toBe('[03:04:05] ignored "computer listen" (cooldown)');
   });
 });

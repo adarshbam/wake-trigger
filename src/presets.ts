@@ -10,6 +10,7 @@ const DEFAULTS = {
   forceRepeatSeconds: 10,
   launchWaitSeconds: 5,
   matchAtEnd: true,
+  sounds: false,
 };
 
 export function preset(name: "default" | "handy", handyPath?: string): unknown {

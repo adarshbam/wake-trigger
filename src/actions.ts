@@ -3,6 +3,20 @@ import type { Action } from "./config";
 
 export type Spawn = typeof import("node:child_process").spawn;
 
+/** A short beep as feedback. Windows only; elsewhere it does nothing. Never rejects: a missing sound must not matter. */
+export function playSound(kind: "accepted" | "stopped", spawnFn: Spawn = spawn, platform: NodeJS.Platform = process.platform): void {
+  if (platform !== "win32") return;
+  const [frequency, ms] = kind === "accepted" ? [880, 120] : [520, 120];
+  try {
+    const child = spawnFn("powershell", ["-NoProfile", "-NonInteractive", "-Command", `[console]::beep(${frequency},${ms})`],
+      { shell: false, stdio: "ignore", windowsHide: true });
+    child.on("error", () => undefined);
+    child.unref();
+  } catch {
+    // no sound
+  }
+}
+
 const MODIFIERS: Record<string, string> = { ctrl: "^", shift: "+", alt: "%" };
 
 const NAMED_KEYS: Record<string, string> = {

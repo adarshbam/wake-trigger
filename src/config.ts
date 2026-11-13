@@ -27,6 +27,8 @@ export interface Config {
   launchWaitSeconds: number;
   /** Also look for a phrase at the end of speech longer than maxPhraseSeconds ("...and that is all. computer finish"). */
   matchAtEnd: boolean;
+  /** Play a short sound when a phrase is accepted, so the speaker knows it was heard. */
+  sounds: boolean;
   triggers: Trigger[];
 }
 
@@ -122,7 +124,7 @@ function parseTrigger(v: unknown, i: number): Trigger {
 
 export function parseConfig(raw: unknown): Config {
   if (!isObject(raw)) throw new ConfigError("config must be a JSON object");
-  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "forceRepeatSeconds", "launchWaitSeconds", "matchAtEnd", "triggers"], "");
+  rejectUnknown(raw, ["microphone", "model", "tolerance", "maxPhraseSeconds", "cooldownSeconds", "maxOnSeconds", "forceRepeatSeconds", "launchWaitSeconds", "matchAtEnd", "sounds", "triggers"], "");
   const microphone = raw.microphone === undefined ? "default" : nonEmptyString(raw.microphone, "microphone");
   const model = raw.model === undefined ? "moonshine-base-en" : raw.model;
   if (model !== "moonshine-base-en" && model !== "moonshine-tiny-en") {
@@ -136,11 +138,13 @@ export function parseConfig(raw: unknown): Config {
   const launchWaitSeconds = number(raw, "launchWaitSeconds", 5, false);
   if (raw.matchAtEnd !== undefined && typeof raw.matchAtEnd !== "boolean") throw new ConfigError("matchAtEnd must be true or false");
   const matchAtEnd = raw.matchAtEnd === undefined ? true : raw.matchAtEnd;
+  if (raw.sounds !== undefined && typeof raw.sounds !== "boolean") throw new ConfigError("sounds must be true or false");
+  const sounds = raw.sounds === undefined ? false : raw.sounds;
   if (!Array.isArray(raw.triggers) || raw.triggers.length === 0) {
     throw new ConfigError("triggers must be a non-empty array");
   }
   const triggers = raw.triggers.map(parseTrigger);
-  const config: Config = { microphone, model, tolerance, maxPhraseSeconds, cooldownSeconds, maxOnSeconds, forceRepeatSeconds, launchWaitSeconds, matchAtEnd, triggers };
+  const config: Config = { microphone, model, tolerance, maxPhraseSeconds, cooldownSeconds, maxOnSeconds, forceRepeatSeconds, launchWaitSeconds, matchAtEnd, sounds, triggers };
 
   const cands = candidatesOf(config);
   for (let a = 0; a < cands.length; a++) {

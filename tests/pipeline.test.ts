@@ -226,14 +226,45 @@ describe("Pipeline", () => {
 
   it("a forced start keeps the group on, so the stop phrase then works", () => {
     say("computer listen");
-    ms = 3000;
+    ms = 7000;
     say("computer listen");
-    ms = 6000;
+    ms = 10000;
     say("computer listen");
     expect(events.map((e) => [e.outcome, e.forced])).toEqual([["fired", false], ["blocked-by-state", false], ["fired", true]]);
-    ms = 9000;
+    ms = 13000;
     say("computer finish");
     expect(events[3]).toMatchObject({ outcome: "fired", forced: false });
+  });
+
+  it("repeats in the 6 seconds after a fire never force, however many there are", () => {
+    say("computer listen");
+    for (ms = 1600; ms < 6000; ms += 1000) say("computer listen");
+    expect(events.slice(1).every((e) => e.outcome === "blocked-by-state" && !e.forced)).toBe(true);
+    expect(fired).toEqual([config.triggers[0]]);
+    // and they did not count toward a force: the first repeat after the settling time is only the first block
+    ms = 6000;
+    say("computer listen");
+    expect(events.at(-1)).toMatchObject({ outcome: "blocked-by-state", forced: false });
+    ms = 8000;
+    say("computer listen");
+    expect(events.at(-1)).toMatchObject({ outcome: "fired", forced: true });
+  });
+
+  it("gives a launched program longer to settle before a repeat can force", () => {
+    const c = parseConfig({ launchWaitSeconds: 5, triggers: [
+      { phrase: "computer listen", group: "handy", sets: "on", requires: "handy.exe", launch: { run: "handy.exe" }, action: { run: "x" } },
+      { phrase: "computer finish", group: "handy", sets: "off", requires: "handy.exe", action: { run: "x" } },
+    ] });
+    pipeline = make(c);
+    pipeline.feed(silence(3));
+    runningNames = [];
+    say("computer listen");
+    expect(events[0].outcome).toBe("launching");
+    runningNames = ["handy.exe"];
+    for (ms = 2000; ms < 17000; ms += 2000) say("computer listen");
+    expect(events.slice(1).every((e) => e.outcome === "blocked-by-state" && !e.forced)).toBe(true);
+    expect(fired).toEqual([]);
+    expect(launched).toHaveLength(1);
   });
 
   it("forceRepeatSeconds 0 disables forcing", () => {

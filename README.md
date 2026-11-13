@@ -120,6 +120,7 @@ If the config is invalid, the program stops at start with a message that names t
 | `forceRepeatSeconds` | number, 0 or more | `10` | A phrase ignored because of group state fires anyway when it is said again within this time. `0` turns this off. |
 | `launchWaitSeconds` | number, 0 or more | `5` | After a program was started by `launch`, wait this long before sending it the action. |
 | `matchAtEnd` | `true` or `false` | `true` | Also look for a phrase at the end of speech longer than `maxPhraseSeconds`. |
+| `sounds` | `true` or `false` | `false` | Play a short beep when a phrase is accepted: a high tone for a start or plain trigger, a lower tone for a `sets: "off"` trigger. Windows only. |
 | `triggers` | array, not empty | none | The list of triggers. Required. |
 
 ### Trigger fields
@@ -171,10 +172,10 @@ A group returns to off after `maxOnSeconds`, so a missed stop phrase cannot leav
 wake-trigger cannot see the real state of the app. It only remembers what it sent. If you start or stop the app another way, that memory is wrong, and the next phrase is ignored:
 
 ```
-[12:00:01] ignored "computer finish" (blocked-by-state; say it again to force)
+[12:00:01] ignored "computer finish" (blocked-by-state)
 ```
 
-Say the same phrase again within `forceRepeatSeconds` and it fires anyway:
+Say the same phrase again within `forceRepeatSeconds` and it fires anyway. Repeats in the first 6 seconds after a trigger fired do not count, and neither do repeats while a program is being started: the app is still reacting, and forcing then would undo the start.
 
 ```
 [12:00:05] fired "computer finish" (forced by repeat)
@@ -213,7 +214,7 @@ What happens when you say the phrase:
 [12:00:08] fired "computer listen"
 ```
 
-So the first phrase after a restart takes a few seconds longer. A trigger without `launch` is still skipped while its program is closed.
+So the first phrase after a restart takes a few seconds longer. Say the phrase once and wait; set `"sounds": true` to hear a beep the moment the phrase is accepted. A trigger without `launch` is still skipped while its program is closed.
 
 ## Handy preset
 

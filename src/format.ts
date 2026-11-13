@@ -16,8 +16,7 @@ export function formatTime(d: Date): string {
 }
 
 export function formatIgnored(d: Date, trigger: Trigger, reason: "cooldown" | "blocked-by-state"): string {
-  const hint = reason === "blocked-by-state" ? "; say it again to force" : "";
-  return `[${formatTime(d)}] ignored "${trigger.phrase}" (${reason}${hint})`;
+  return `[${formatTime(d)}] ignored "${trigger.phrase}" (${reason})`;
 }
 
 export function formatFired(d: Date, trigger: Trigger, forced: boolean): string {

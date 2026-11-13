@@ -7,7 +7,7 @@ import type { Config, Trigger } from "./config";
 import { downloadModels, modelFiles, modelsPresent } from "./models";
 import { listDevices, openMic } from "./mic";
 import { Pipeline } from "./pipeline";
-import { runAction } from "./actions";
+import { playSound, runAction } from "./actions";
 import { preset } from "./presets";
 import { describeError, formatClip, formatFired, formatIgnored, formatLaunching, formatNotRunning } from "./format";
 import { acquireLock, lockOwner } from "./lock";
@@ -129,11 +129,13 @@ async function listen(mode: "test" | "start"): Promise<void> {
     isRunning: (name) => watch.isRunning(name),
     onLaunch: (trigger) => {
       if (mode === "test") return;
+      if (config.sounds) playSound("accepted");
       launchThenRun(trigger, watch, config.launchWaitSeconds).catch((e) =>
         console.error(`Starting ${trigger.requires} for "${trigger.phrase}" failed: ${describeError(e)}`));
     },
     onFire: (trigger) => {
       if (mode === "test") return;
+      if (config.sounds) playSound(trigger.sets === "off" ? "stopped" : "accepted");
       runAction(trigger.action).catch((e) =>
         console.error(`Action for "${trigger.phrase}" failed: ${e instanceof Error ? e.message : String(e)}`));
     },
